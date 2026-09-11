@@ -224,6 +224,7 @@ export async function runDemo(manifest, {
       timeline,
       pause,
       viewport: manifest.browser.viewport,
+      pace: narration.pace,
     });
     driverContext = createDriverContext(base, timeline, helpers, narration);
 
@@ -236,7 +237,17 @@ export async function runDemo(manifest, {
     timeline.meta.contentEnd = timeline.elapsed();
 
     if (manifest.state.policy === 'restore' && typeof driver.restore === 'function') {
-      await driver.restore({ ...driverContext, before });
+      await driver.restore({
+        page,
+        context,
+        manifest,
+        secrets,
+        rehearsal,
+        workDir,
+        scenePlan,
+        timeline,
+        before,
+      });
     }
     const after = await driver.snapshot(driverContext);
     timeline.state.after = after;

@@ -4,9 +4,9 @@ export default {
     productionReady: false,
     mutatesState: false,
     todos: [
-      'Replace placeholder locators with selectors proven against the running app.',
-      'Implement each normalized scene and its event-driven success boundary.',
-      'Implement a meaningful state snapshot and restoration assertion.',
+      'Prove each recorded locator is visible, unique, and scoped to a stable region.',
+      'Align each action to its narration cue and implement two-phase async boundaries.',
+      'Implement a meaningful state snapshot and independent restoration assertion.',
     ],
   },
 
@@ -36,8 +36,11 @@ export default {
     );
   },
 
-  async restore() {
-    // Restore any state changed by a partially completed take.
+  async restore({ page }) {
+    // Restore any state changed by a partially completed take. This hook does
+    // not receive recorded point/click/typeText helpers; prefer an API or
+    // fixture reset, otherwise use separately proven direct Playwright steps.
+    void page;
   },
 
   async verifyRestored({ before, after }) {

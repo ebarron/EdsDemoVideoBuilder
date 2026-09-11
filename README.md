@@ -104,6 +104,11 @@ fast internal checks before expensive capture. It inspects the repository and
 running app for start, authentication, readiness, and state information, then
 asks when uncertain.
 
+Recorded interactions default to visible pointer travel, sequential typing for
+text the viewer should read, and action timing aligned to the relevant spoken
+cue. The skill favors comprehension over a fixed duration; a duration request
+is treated as an optional constraint.
+
 It may infer the login flow and required environment-variable names, but it
 must **never** guess or persist credential values. It asks you if credentials
 are needed. The default state policy is read-only. If the script requests a
@@ -127,7 +132,7 @@ any of these optional details:
 > - Narration: `<voice, segmented clips, reference track, or silent>`
 > - Browser: `<viewport and zoom>`
 > - Extra output: `<contact-sheet path or other requested artifacts>`
-> - Wait compression: `<style or target duration>`
+> - Wait compression / optional duration constraint: `<style or duration>`
 >
 > Probe anything I omit, ask only about material uncertainty, internally check
 > and repair the action path, then record, finish, validate, and open the video.

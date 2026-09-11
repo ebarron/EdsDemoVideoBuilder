@@ -105,13 +105,24 @@ The generated driver is a scaffold, not a claim that natural-language stage
 directions can deterministically operate an arbitrary app. The agent must:
 
 1. Inspect existing recording/E2E helpers and the running app.
-2. Use Playwright accessibility roles and DOM inspection to prove locators.
-3. Implement each scene with robust selectors and explicit initiating,
-   success, and error boundaries.
-4. Identify the actual inner scroll owner. Use the runtime rAF scroll helper
+2. Use Playwright accessibility roles and DOM inspection to prove every
+   recorded locator is visible and unique. Scope repeated labels to a stable
+   region such as navigation, canvas, dialog, or chat; never hide ambiguity
+   with `.first()` or `.nth()`.
+3. Use the recorder's watchable `point`, `click`, and `typeText` helpers for
+   viewer-facing interaction. Reserve instant `fill()` and direct DOM actions
+   for unrecorded setup, probes, and restoration.
+4. Give each narrated cue ownership of its action with explicit
+   `waitNarrationFraction` checkpoints instead of clustering clicks at the
+   start of a scene.
+5. Implement each variable operation with initiating, busy/start,
+   busy-complete, identity-change/success, and error boundaries.
+6. Identify the actual inner scroll owner. Use the runtime rAF scroll helper
    and verify progressive 0/25/50/75/100 samples.
-5. Implement snapshot, restore, and restoration verification hooks.
-6. Clear `status.todos` and set `productionReady: true` only after accelerated
+7. Implement snapshot, restore, and restoration verification hooks. Keep
+   restoration independent of recorded pointer helpers and scene locators;
+   prefer an API or fixture reset, otherwise use separately proven UI steps.
+8. Clear `status.todos` and set `productionReady: true` only after accelerated
    rehearsal succeeds.
 
 Read [references/driver-api.md](references/driver-api.md) for the contract.
@@ -130,6 +141,10 @@ node scripts/demo.mjs rehearse --manifest path/to/demo.yaml
 `rehearse` starts it when configured and executes the driver without recording
 at `timing.rehearsalScale`. Repair selectors and boundaries until rehearsal is
 clean. Never use a timeout to advance a scene; a watchdog can only reject it.
+Do not overlap rehearsals against the same app or fixture. After a late-scene
+failure, probe and repair that boundary directly before paying for another
+complete rehearsal, especially when earlier actions invoke an API or LLM.
+Targeted probes do not replace the final clean end-to-end rehearsal.
 The agent may run these checks automatically before a requested full video.
 Explicit rehearsal is an optional user request for risky, expensive, new, or
 failing demos; it is not a mandatory user-visible gate.
@@ -144,7 +159,7 @@ Before any take:
 - prove the state baseline and restoration path;
 - verify the output does not replace an existing final artifact;
 - use Playwright browser video, never a screenshot montage;
-- inject the visible pointer/click pulse;
+- inject the visible pointer/click pulse and use watchable pointer travel;
 - keep narration concurrent with actions and segmented by scene.
 
 Read [references/production-workflow.md](references/production-workflow.md)
@@ -163,11 +178,15 @@ node scripts/demo.mjs verify --manifest path/to/demo.yaml
 ```
 
 The driver must be production-ready before `record`. A failed action rejects
-the take and invokes restoration. Variable API/LLM waits are measured only
-between an initiating action and an observed successful completion. Compress
-only those successful intervals; keep the click outside the interval and show
-the visible fast-forward overlay. Anchor important generated content at the
-viewport top before any hold or pan.
+the take and invokes the separate restoration path. Variable API/LLM waits
+require two-phase observation: prove the operation started, then prove busy
+state ended and the intended result became uniquely identifiable. Measure only
+between the completed initiating action and that observed success. Compress
+only successful intervals; keep the click outside the interval and show the
+visible fast-forward overlay. Anchor important generated content at the
+viewport top before any hold or pan. Optimize for readable narration,
+watchable motion, and comprehension. Treat a requested duration as an optional
+constraint, never as the quality goal.
 
 The finisher uses explicit content bounds, CFR 25 fps H.264/AAC, 48 kHz audio,
 and faststart. Audio uses finite `apad=whole_dur` followed by `atrim`, and the

@@ -28,7 +28,9 @@ browser video. Preflight deliberately allows an incomplete
 `recordReady`, while structural, environment, and app failures still fail the
 command. Repair:
 
-- role/name locators that do not match the actual accessibility tree;
+- role/name locators that are absent, hidden, or duplicated; scope repeated
+  labels to their navigation, canvas, chat, tab, or dialog container instead
+  of selecting `.first()` or `.nth()`;
 - clipped targets;
 - missed initiating or completion events;
 - wrong nested scroll owners;
@@ -43,11 +45,24 @@ There is no generic selector-repair command. Cursor compares script-sync
 action changes and rehearsal failures, probes the app's accessibility
 tree/DOM, edits `driver.mjs`, and reruns rehearsal.
 
+Never overlap rehearsals against the same application or fixture. When a
+late-scene boundary fails, probe that step directly and repair it before
+replaying earlier costly API/LLM mutations. After targeted probes pass, run one
+clean end-to-end rehearsal and prove restoration before production.
+
 ## 5. Record
 
 Playwright records the real browser. Pointer moves, hover, clicks, route
 transitions, loading UI, and rAF scrolling remain visible. Narration scenes are
 segmented and scheduled concurrently with actions.
+
+Use the recorded interaction helpers for watchable behavior: pointer travel is
+about one second per target, and text the viewer should read is entered
+sequentially. Instant `fill()` remains appropriate for unrecorded setup,
+focused probes, and restoration.
+
+Schedule actions at explicit narration fractions. A spoken sentence owns the
+click or typing it introduces; do not front-load all actions at scene start.
 
 Set `status.productionReady: true` only after a successful complete rehearsal
 and restoration proof. Production `record` rejects a driver that remains
@@ -56,11 +71,22 @@ false.
 For an API or LLM operation:
 
 1. click;
-2. observe the busy/start event;
+2. observe the expected form, request, or busy/start event;
 3. start the measured interval after the click;
-4. wait for the actual success event and required rendered anchor;
-5. reject on error or watchdog timeout;
-6. only then retain that observed interval for compression.
+4. observe the busy state clear;
+5. prove the expected identity or state change is uniquely rendered;
+6. reject on error or watchdog timeout;
+7. only then retain that observed interval for compression.
+
+Restoration is a separate, deliberately plain path. Prefer an API or fixture
+reset. If UI restoration is unavoidable, search and scope its own locators,
+perform direct Playwright actions without recorded pointer helpers, and verify
+the baseline. It must work after both successful and partially failed takes.
+
+Optimize the take for comprehension: readable narration, visible motion, and
+enough time to recognize state changes. A requested duration is an optional
+constraint, not a quality target; do not accelerate the opening or important
+clicks merely to fit a range.
 
 ## 6. Finish and verify
 

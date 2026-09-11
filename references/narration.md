@@ -48,3 +48,9 @@ Narration is mixed at timeline positions after capture. Drivers still schedule
 pointer movement and actions across each measured narration duration. For
 compressed waits, anchor narration a short time after the measured wait starts
 so speech continues over the visible fast-forward.
+
+Concurrency does not mean “act immediately.” Give each important sentence
+ownership of the action it describes by waiting for an explicit narration
+fraction before the click, pointer move, or sequential typing begins. Favor
+watchable motion and comprehension over a duration range; a requested total
+duration is only an optional constraint.

@@ -47,13 +47,44 @@ export function installDemoZoom(zoom) {
   else apply();
 }
 
-export function createBrowserHelpers({ page, timeline, pause, viewport }) {
+export function createBrowserHelpers({ page, timeline, pause, viewport, pace = 1 }) {
+  async function uniqueVisibleTarget(locator, id = 'target') {
+    let count = await locator.count();
+    if (count === 0) {
+      await locator.first().waitFor({ state: 'visible', timeout: 30_000 });
+      count = await locator.count();
+    }
+    if (count !== 1) {
+      throw new Error(
+        `Expected one scoped locator for ${id}, found ${count}; scope it to a stable visible region`,
+      );
+    }
+    await locator.waitFor({ state: 'visible', timeout: 30_000 });
+    return locator;
+  }
+
+  async function movePointer(x, y, { steps, travelMs }) {
+    const start = await page.evaluate(({ width, height }) => {
+      const pointer = document.getElementById('__narrated_demo_pointer');
+      if (!pointer) return { x: width / 2, y: height / 2 };
+      const box = pointer.getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    }, viewport);
+    for (let step = 1; step <= steps; step += 1) {
+      const fraction = step / steps;
+      await page.mouse.move(
+        start.x + (x - start.x) * fraction,
+        start.y + (y - start.y) * fraction,
+      );
+      if (travelMs > 0) await pause(travelMs / steps);
+    }
+  }
+
   async function point(locator, options = {}) {
-    const { hold = 650, id, steps = 28, scroll = true } =
+    const { hold = 650, id, mark = true, steps = 28, scroll = true, travelMs = 900 } =
       typeof options === 'number' ? { hold: options } : options;
-    const target = locator.first();
+    const target = await uniqueVisibleTarget(locator, id ?? 'pointer target');
     if (scroll) await target.scrollIntoViewIfNeeded();
-    await target.waitFor({ state: 'visible', timeout: 30_000 });
     const box = await target.boundingBox();
     if (!box) throw new Error(`No visible box for ${id ?? 'pointer target'}`);
     if (
@@ -64,16 +95,16 @@ export function createBrowserHelpers({ page, timeline, pause, viewport }) {
     ) {
       throw new Error(`Pointer target is clipped for ${id ?? 'unknown'}: ${JSON.stringify(box)}`);
     }
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps });
-    if (id) timeline.markAction(id, 'point', { box });
+    await movePointer(box.x + box.width / 2, box.y + box.height / 2, { steps, travelMs });
+    if (id && mark) timeline.markAction(id, 'point', { box });
     await pause(hold);
     return box;
   }
 
   async function click(locator, id, options = {}) {
-    const { hold = 450, downMs = 110, scroll = true } =
+    const { hold = 450, downMs = 110, scroll = true, steps = 28, travelMs = 900 } =
       typeof options === 'number' ? { hold: options } : options;
-    const box = await point(locator, { hold: 250, scroll });
+    const box = await point(locator, { hold: 250, id, mark: false, scroll, steps, travelMs });
     const event = timeline.markAction(id, 'click', { box });
     await page.mouse.down();
     await pause(downMs);
@@ -83,8 +114,29 @@ export function createBrowserHelpers({ page, timeline, pause, viewport }) {
     return { down: event.at, up, box };
   }
 
+  async function typeText(locator, text, id, options = {}) {
+    const {
+      clear = false,
+      delayMs = 55,
+      hold = 350,
+      scroll = true,
+      travelMs = 900,
+    } = options;
+    const target = await uniqueVisibleTarget(locator, id);
+    await click(target, `${id}.focus`, { hold: 150, scroll, travelMs });
+    if (clear) {
+      await target.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+      await target.press('Backspace');
+    }
+    const event = timeline.markAction(id, 'type', { characters: [...String(text)].length });
+    await target.pressSequentially(String(text), { delay: Math.max(0, delayMs * pace) });
+    await pause(hold);
+    return event;
+  }
+
   async function scrollMetrics(locator) {
-    return locator.first().evaluate((element) => {
+    const target = await uniqueVisibleTarget(locator, 'scroll target');
+    return target.evaluate((element) => {
       let owner = element.parentElement;
       while (owner && owner !== document.body) {
         const style = getComputedStyle(owner);
@@ -106,7 +158,8 @@ export function createBrowserHelpers({ page, timeline, pause, viewport }) {
   }
 
   async function positionAtTop(locator, offset = 8) {
-    return locator.first().evaluate((element, topOffset) => {
+    const target = await uniqueVisibleTarget(locator, 'position target');
+    return target.evaluate((element, topOffset) => {
       let owner = element.parentElement;
       while (owner && owner !== document.body) {
         const style = getComputedStyle(owner);
@@ -134,8 +187,7 @@ export function createBrowserHelpers({ page, timeline, pause, viewport }) {
     to = 'element',
     capture,
   }) {
-    const target = locator.first();
-    await target.waitFor({ state: 'attached', timeout: 30_000 });
+    const target = await uniqueVisibleTarget(locator, id ?? 'smooth-scroll target');
     const runtimeDuration = Math.max(250, durationMs);
     const started = timeline.elapsed();
     const animation = target.evaluate((element, settings) => new Promise((resolve, reject) => {
@@ -208,5 +260,5 @@ export function createBrowserHelpers({ page, timeline, pause, viewport }) {
     return result;
   }
 
-  return { point, click, scrollMetrics, positionAtTop, smoothScroll };
+  return { point, click, typeText, scrollMetrics, positionAtTop, smoothScroll };
 }

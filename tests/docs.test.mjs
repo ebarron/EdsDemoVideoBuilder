@@ -12,6 +12,9 @@ const MARKDOWN = [
     .filter((name) => name.endsWith('.md'))
     .map((name) => path.join(ROOT, 'references', name)),
 ];
+const SKILL = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8');
+const DRIVER_API = fs.readFileSync(path.join(ROOT, 'references', 'driver-api.md'), 'utf8');
+const WORKFLOW = fs.readFileSync(path.join(ROOT, 'references', 'production-workflow.md'), 'utf8');
 
 test('local Markdown links resolve', () => {
   for (const file of MARKDOWN) {
@@ -25,5 +28,36 @@ test('local Markdown links resolve', () => {
         `${path.relative(ROOT, file)} has a missing link: ${link}`,
       );
     }
+  }
+});
+
+test('skill documents watchable and resilient driver defaults', () => {
+  for (const pattern of [
+    /visible and unique/,
+    /waitNarrationFraction/,
+    /busy-complete/,
+    /restoration independent of recorded pointer helpers/,
+    /Do not overlap rehearsals/,
+    /duration as an optional\s+constraint, never as the quality goal/,
+  ]) {
+    assert.match(SKILL, pattern);
+  }
+  for (const pattern of [
+    /exactly one visible\s+element/,
+    /about 900 ms of visible pointer travel/,
+    /types sequentially/,
+    /sentence should own\s+the action/,
+    /busy state appears, then it\s+clears/,
+    /Recorded pointer, typing, and scene helpers are\s+intentionally unavailable/,
+  ]) {
+    assert.match(DRIVER_API, pattern);
+  }
+  for (const pattern of [
+    /Never overlap rehearsals/,
+    /probe that step directly/,
+    /API or fixture\s+reset/,
+    /optional\s+constraint, not a quality target/,
+  ]) {
+    assert.match(WORKFLOW, pattern);
   }
 });

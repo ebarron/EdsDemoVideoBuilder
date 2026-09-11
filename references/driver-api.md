@@ -11,7 +11,10 @@ It imports no generic runtime: the recorder supplies a context.
 - `setup(ctx)`: navigate and prove the first recorded view is ready.
 - `snapshot(ctx)`: return a stable JSON state projection.
 - `run(ctx)`: execute scenes.
-- `restore({...ctx, before})`: undo partial or completed mutation.
+- `restore({page, context, manifest, secrets, rehearsal, workDir, scenePlan,
+  timeline, before})`: undo partial or completed mutation through an
+  independent path. Recorded pointer, typing, and scene helpers are
+  intentionally unavailable.
 - `verifyRestored({...ctx, before, after})`: fail unless the baseline is
   restored.
 
@@ -34,8 +37,11 @@ The important values and helpers are:
 - `page`, `context`, `manifest`, `scenePlan`, `secrets`, `workDir`,
   `rehearsal`;
 - `pause(ms)`: scaled in rehearsal;
-- `point(locator, {id, hold, scroll})`;
-- `click(locator, id, {hold, downMs, scroll})`, returning `{down, up, box}`;
+- `point(locator, {id, hold, scroll, steps, travelMs})`;
+- `click(locator, id, {hold, downMs, scroll, steps, travelMs})`, returning
+  `{down, up, box}`;
+- `typeText(locator, text, id, {clear, delayMs, hold, scroll, travelMs})` for
+  viewer-facing sequential typing;
 - `startNarration(id, {start, anchor})` and
   `waitNarrationFraction(entry, fraction)`;
 - `scene(id, action)`, which starts narration, runs the action concurrently,
@@ -45,15 +51,63 @@ The important values and helpers are:
   `smoothScroll(locator, {id, durationMs, offset, to, capture})`;
 - `timeline.markAction(...)`.
 
+## Locator and interaction contract
+
+Every locator passed to a recorded helper must resolve to exactly one visible
+element. Scope repeated accessible names to a stable semantic container, for
+example:
+
+```js
+const navigation = page.getByRole('navigation', { name: 'Primary' });
+const alertingLink = navigation.getByRole('link', { name: 'Alerting', exact: true });
+await click(alertingLink, 'alerting.open');
+```
+
+Do not use `.first()` or `.nth()` to silence a strictness failure. Repeated
+labels in navigation, canvas, chat, tabs, and dialogs are normal; choose the
+container that expresses the intended target.
+
+`point` and `click` use about 900 ms of visible pointer travel by default.
+`typeText` focuses visibly and types sequentially. Use instant `fill()` only
+when the input is not meant to be read, such as unrecorded setup, a targeted
+probe, or restoration. Never type credentials in the recorded context.
+
+## Narration ownership
+
+Treat narration fractions as action cues. Each important sentence should own
+the action it describes:
+
+```js
+await scene('alert-editing', async (narration) => {
+  await waitNarrationFraction(narration, 0.28);
+  await click(alertingLink, 'alerting.open');
+  await waitNarrationFraction(narration, 0.62);
+  await click(editButton, 'alerting.edit');
+});
+```
+
+Do not place every click at scene start merely because narration and actions
+run concurrently.
+
 ## Event boundaries
 
-The initiating click must finish before a measured wait starts:
+The initiating click must finish before a measured wait starts. For an
+API/LLM-driven canvas change, prove both phases: the busy state appears, then it
+clears and the intended result—not merely any result—becomes unique.
 
 ```js
 const sent = await click(sendButton, 'analysis.send', { hold: 80 });
 const wait = await measuredWait('analysis.response', sent.up, 2, async () => {
   await stopButton.waitFor({ state: 'visible' });
   await sendButton.waitFor({ state: 'visible', timeout: 300_000 });
+  await page.getByText('Thinking...', { exact: true }).waitFor({ state: 'hidden' });
+  const resultHeading = canvas.getByRole('heading', {
+    name: expectedRuleName,
+    exact: true,
+  });
+  if (await resultHeading.count() !== 1) {
+    throw new Error(`Expected one completed result for ${expectedRuleName}`);
+  }
   await resultHeading.waitFor({ state: 'visible' });
   if (await errorBanner.isVisible()) throw new Error('Analysis failed');
 });
@@ -65,6 +119,14 @@ startNarration('analysis', {
 
 The timeout only rejects the take. It must never move the driver forward or be
 shown as a successful scene.
+
+## Restoration
+
+Prefer an API or isolated-fixture reset. If restoration must use the UI, build
+plain, separately scoped locators inside `restore`; search, expand, verify the
+target identity, mutate, and verify disappearance or baseline equality. Do not
+reuse scene closures or `point`, `click`, and `typeText`: restoration must also
+work after a scene fails before those helpers or local variables are usable.
 
 ## Scrolling
 
