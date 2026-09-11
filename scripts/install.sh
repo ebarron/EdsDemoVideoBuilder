@@ -3,7 +3,7 @@
 set -eu
 
 fail() {
-  printf 'narrated-browser-demo install: %s\n' "$1" >&2
+  printf 'demo-video-builder install: %s\n' "$1" >&2
   exit 1
 }
 
@@ -32,4 +32,4 @@ npm run smoke
 npm test
 node scripts/demo.mjs help >/dev/null
 
-printf 'narrated-browser-demo is ready at %s\n' "$ROOT"
+printf 'Demo Video Builder (demo-video-builder) is ready at %s\n' "$ROOT"

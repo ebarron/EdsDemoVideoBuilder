@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cursor.local/narrated-browser-demo/demo-manifest.schema.json",
-  "title": "Narrated browser demo manifest",
+  "$id": "https://cursor.local/demo-video-builder/demo-manifest.schema.json",
+  "title": "Demo Video Builder manifest",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -7,15 +7,15 @@ Prerequisites: GitHub CLI authenticated with repository access and Node.js 20+
 with npm.
 
 ```bash
-gh repo clone ebarron/EdsDemoVideoBuilder "$HOME/.cursor/skills/narrated-browser-demo"
-"$HOME/.cursor/skills/narrated-browser-demo/scripts/install.sh"
+gh repo clone ebarron/EdsDemoVideoBuilder "$HOME/.cursor/skills/demo-video-builder"
+"$HOME/.cursor/skills/demo-video-builder/scripts/install.sh"
 ```
 
 Start a new Cursor chat or reload Cursor after the first installation.
 
 ```bash
-git -C "$HOME/.cursor/skills/narrated-browser-demo" pull --ff-only
-"$HOME/.cursor/skills/narrated-browser-demo/scripts/install.sh"
+git -C "$HOME/.cursor/skills/demo-video-builder" pull --ff-only
+"$HOME/.cursor/skills/demo-video-builder/scripts/install.sh"
 ```
 
 Project-local installation, manual copies, and non-macOS installation are

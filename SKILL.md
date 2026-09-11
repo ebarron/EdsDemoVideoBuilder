@@ -1,9 +1,9 @@
 ---
-name: narrated-browser-demo
-description: Creates, rehearses, records, finishes, and validates narrated Playwright browser demos from Markdown scripts. Use when the user asks to record a narrated browser demo, initialize a demo manifest and driver, repair demo selectors, finish a recording, or validate demo video artifacts.
+name: demo-video-builder
+description: Demo Video Builder creates, rehearses, records, finishes, and validates narrated Playwright browser demos from Markdown scripts. Use when the user asks to record a narrated browser demo, initialize a demo manifest and driver, repair demo selectors, finish a recording, or validate demo video artifacts.
 ---
 
-# Narrated browser demo
+# Demo Video Builder
 
 Build real browser recordings from a Markdown narrative. This v1 is macOS-first
 for `say` narration and provides portable `clips`, `reference`, and `silent`

@@ -1,7 +1,7 @@
-# narrated-browser-demo
+# Demo Video Builder
 
-A macOS-first Cursor skill for making a narrated recording of a real browser
-app.
+`demo-video-builder` is a macOS-first Cursor skill for making a narrated
+recording of a real browser app.
 
 You normally edit one file: your Markdown demo script.
 
@@ -12,12 +12,12 @@ access to the private repository (`gh auth login` if needed), and Node.js 20+
 with npm.
 
 ```bash
-gh repo clone ebarron/EdsDemoVideoBuilder "$HOME/.cursor/skills/narrated-browser-demo"
-"$HOME/.cursor/skills/narrated-browser-demo/scripts/install.sh"
+gh repo clone ebarron/EdsDemoVideoBuilder "$HOME/.cursor/skills/demo-video-builder"
+"$HOME/.cursor/skills/demo-video-builder/scripts/install.sh"
 ```
 
 Start a new Cursor chat or reload Cursor after installation so
-`/narrated-browser-demo` is discovered across projects.
+`/demo-video-builder` is discovered across projects.
 
 ## Quick start: first demo
 
@@ -50,7 +50,7 @@ Open the app or start its development server. The examples below use
 
 **Option A — Natural-language request**
 
-> Use the `narrated-browser-demo` skill to record a demo from
+> Use the `demo-video-builder` skill to record a demo from
 > `docs/ProductDemoScript.md` against the app running at
 > `http://127.0.0.1:5173`. Save the finished video to
 > `docs/video/ProductDemo.mp4`. Inspect the app and internally verify and
@@ -62,12 +62,12 @@ Open the app or start its development server. The examples below use
 **Option B — Explicit slash command**
 
 ```text
-/narrated-browser-demo Record a demo from docs/ProductDemoScript.md against http://127.0.0.1:5173. Save the finished video to docs/video/ProductDemo.mp4. Inspect the app and internally verify and repair the action path before recording. Ask only about anything important you cannot determine. Record, finish, validate, and open the result.
+/demo-video-builder Record a demo from docs/ProductDemoScript.md against http://127.0.0.1:5173. Save the finished video to docs/video/ProductDemo.mp4. Inspect the app and internally verify and repair the action path before recording. Ask only about anything important you cannot determine. Record, finish, validate, and open the result.
 ```
 
 For another app, copy either option and change the script path, app URL, and
 output path. `@` adds a file or other context to a prompt; it does not invoke a
-skill. If `/narrated-browser-demo` does not appear after installation, start a
+skill. If `/demo-video-builder` does not appear after installation, start a
 new chat or reload Cursor so skills are rediscovered.
 
 ### 4. Review the video and request changes
@@ -84,7 +84,7 @@ new chat or reload Cursor so skills are rediscovered.
 **Option B — Explicit slash command**
 
 ```text
-/narrated-browser-demo The video is close. In the storage section, keep narration running while navigating the detail dialogs. Replace the overview and final-dashboard scroll jumps with smooth continuous scrolling, then rerecord and open docs/video/ProductDemo.mp4.
+/demo-video-builder The video is close. In the storage section, keep narration running while navigating the detail dialogs. Replace the overview and final-dashboard scroll jumps with smooth continuous scrolling, then rerecord and open docs/video/ProductDemo.mp4.
 ```
 
 The skill discards failed takes and enforces its write, secret, baseline, and
@@ -93,8 +93,8 @@ restoration safety rules without requiring you to repeat them in every prompt.
 ## Update
 
 ```bash
-git -C "$HOME/.cursor/skills/narrated-browser-demo" pull --ff-only
-"$HOME/.cursor/skills/narrated-browser-demo/scripts/install.sh"
+git -C "$HOME/.cursor/skills/demo-video-builder" pull --ff-only
+"$HOME/.cursor/skills/demo-video-builder/scripts/install.sh"
 ```
 
 ## Defaults and discovery
@@ -115,7 +115,7 @@ before proceeding.
 The three values in Quick Start are usually enough. To override defaults, add
 any of these optional details:
 
-> Use the `narrated-browser-demo` skill to record
+> Use the `demo-video-builder` skill to record
 > `docs/ProductDemoScript.md` against `http://127.0.0.1:5173`, with finished
 > output at `docs/video/ProductDemo.mp4`.
 >
@@ -139,14 +139,14 @@ internal probes or an accelerated rehearsal before expensive capture.
 Explicit `rehearse` is optional when you want a no-recording dry run for a new,
 risky, expensive, or failing demo:
 
-> Use the `narrated-browser-demo` skill to rehearse this demo without recording,
+> Use the `demo-video-builder` skill to rehearse this demo without recording,
 > repair any failed actions, and report what remains before a full take.
 
 ## Change an existing demo
 
 Edit only the Markdown script, then paste:
 
-> Use the `narrated-browser-demo` skill. I changed `<path-to-demo.md>`.
+> Use the `demo-video-builder` skill. I changed `<path-to-demo.md>`.
 > Resynchronize the demo, summarize what changed, repair any affected browser
 > actions by inspecting the app, internally verify the path, then rerecord,
 > validate, and open the output. Preserve and restore app state, ask before
@@ -202,7 +202,7 @@ These are implementation artifacts. They are normally hands off:
   replaceable working data used to finish and diagnose a take.
 
 For low-level operation, run
-`node "$HOME/.cursor/skills/narrated-browser-demo/scripts/demo.mjs" help`.
+`node "$HOME/.cursor/skills/demo-video-builder/scripts/demo.mjs" help`.
 Script
 resynchronization previews changes by default and writes only with explicit
 backup/atomic replacement. A not-yet-ready demo may rehearse, but production

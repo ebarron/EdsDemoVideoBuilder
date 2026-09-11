@@ -19,8 +19,8 @@ let browser;
 try {
   browser = await chromium.launch();
   const page = await browser.newPage();
-  await page.setContent('<title>narrated-browser-demo smoke test</title>');
-  assert.equal(await page.title(), 'narrated-browser-demo smoke test');
+  await page.setContent('<title>demo-video-builder smoke test</title>');
+  assert.equal(await page.title(), 'demo-video-builder smoke test');
 } finally {
   await browser?.close();
 }

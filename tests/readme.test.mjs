@@ -44,16 +44,16 @@ test('README links resolve and prompt states safety gates', () => {
     /Option A — Natural-language request/,
     /\*\*OR\*\*/,
     /Option B — Explicit slash command/,
-    /\/narrated-browser-demo Record a demo from docs\/ProductDemoScript\.md/,
+    /\/demo-video-builder Record a demo from docs\/ProductDemoScript\.md/,
     /`@` adds a file or other context to a prompt; it does not invoke a/,
     /Start a new Cursor chat or reload Cursor/,
     /The video is close\. In the storage section/,
-    /\/narrated-browser-demo The video is close\./,
+    /\/demo-video-builder The video is close\./,
     /never\*\* guess or persist credential values/i,
     /asks for explicit authorization and restoration requirements/,
-    /gh repo clone ebarron\/EdsDemoVideoBuilder "\$HOME\/\.cursor\/skills\/narrated-browser-demo"/,
-    /"\$HOME\/\.cursor\/skills\/narrated-browser-demo\/scripts\/install\.sh"/,
-    /git -C "\$HOME\/\.cursor\/skills\/narrated-browser-demo" pull --ff-only/,
+    /gh repo clone ebarron\/EdsDemoVideoBuilder "\$HOME\/\.cursor\/skills\/demo-video-builder"/,
+    /"\$HOME\/\.cursor\/skills\/demo-video-builder\/scripts\/install\.sh"/,
+    /git -C "\$HOME\/\.cursor\/skills\/demo-video-builder" pull --ff-only/,
   ]) {
     assert.match(README, pattern);
   }

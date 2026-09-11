@@ -14,7 +14,7 @@ import {
   writeScaffold,
 } from '../runtime/index.mjs';
 
-const HELP = `narrated-browser-demo
+const HELP = `demo-video-builder — Demo Video Builder
 
 Usage:
   demo.mjs init --script <markdown> --url <app-url> --id <demo-id>
