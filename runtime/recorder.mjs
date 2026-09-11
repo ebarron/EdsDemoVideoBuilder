@@ -127,10 +127,10 @@ function createDriverContext(base, timeline, helpers, narration) {
     finishAnchoredNarration,
     scene,
     measuredWait: (...args) => timeline.measuredWait(...args),
-    smoothScroll: (locator, options) =>
+    smoothScroll: (locator, options = {}) =>
       helpers.smoothScroll(locator, {
         ...options,
-        durationMs: options.durationMs * pace,
+        durationMs: (options.durationMs ?? 1_600) * pace,
       }),
   };
 }

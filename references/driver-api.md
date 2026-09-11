@@ -37,17 +37,20 @@ The important values and helpers are:
 - `page`, `context`, `manifest`, `scenePlan`, `secrets`, `workDir`,
   `rehearsal`;
 - `pause(ms)`: scaled in rehearsal;
-- `point(locator, {id, hold, scroll, steps, travelMs})`;
-- `click(locator, id, {hold, downMs, scroll, steps, travelMs})`, returning
-  `{down, up, box}`;
-- `typeText(locator, text, id, {clear, delayMs, hold, scroll, travelMs})` for
-  viewer-facing sequential typing;
+- `point(locator, {id, hold, scroll, scrollDurationMs, scrollOffset, steps,
+  travelMs})`;
+- `click(locator, id, {hold, downMs, scroll, scrollDurationMs, scrollOffset,
+  steps, travelMs})`, returning `{down, up, box}`;
+- `typeText(locator, text, id, {clear, delayMs, hold, scroll,
+  scrollDurationMs, scrollOffset, travelMs})` for viewer-facing sequential
+  typing;
 - `startNarration(id, {start, anchor})` and
   `waitNarrationFraction(entry, fraction)`;
 - `scene(id, action)`, which starts narration, runs the action concurrently,
   and holds through the segment;
 - `measuredWait(id, click.up, targetSeconds, completion)`;
-- `scrollMetrics(locator)`, `positionAtTop(locator, offset)`, and
+- `scrollMetrics(locator)`,
+  `positionAtTop(locator, offset, {id, durationMs, instant})`, and
   `smoothScroll(locator, {id, durationMs, offset, to, capture})`;
 - `timeline.markAction(...)`.
 
@@ -132,5 +135,12 @@ work after a scene fails before those helpers or local variables are usable.
 
 Use the actual inner owner. `smoothScroll` walks ancestors for vertical
 overflow, uses requestAnimationFrame with easing, samples five positions, and
-rejects non-progressive movement. Use `positionAtTop` before a hold/pan so an
-important generated heading begins at the viewport top.
+rejects non-progressive movement. Its default duration is 1.6 seconds.
+`point`, `click`, and `typeText` automatically use the same slow scroll to
+reveal an offscreen target. `positionAtTop` is also smooth by default.
+
+Do not use `scrollIntoViewIfNeeded()`, direct `scrollTop` assignment, or a
+single large wheel event during recorded choreography. An explicit
+`scroll: 'instant'` or `positionAtTop(..., {instant: true})` is allowed only
+when the user asks for a jump. Use `scroll: false` when the target must already
+be onscreen and any automatic movement should fail.

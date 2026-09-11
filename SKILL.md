@@ -117,8 +117,10 @@ directions can deterministically operate an arbitrary app. The agent must:
    start of a scene.
 5. Implement each variable operation with initiating, busy/start,
    busy-complete, identity-change/success, and error boundaries.
-6. Identify the actual inner scroll owner. Use the runtime rAF scroll helper
-   and verify progressive 0/25/50/75/100 samples.
+6. Identify the actual inner scroll owner. Make every recorded scroll slow and
+   smooth by default, including automatic target reveals and viewport
+   positioning. Use the runtime rAF scroll helper and verify progressive
+   0/25/50/75/100 samples. Jump only when the user explicitly requests it.
 7. Implement snapshot, restore, and restoration verification hooks. Keep
    restoration independent of recorded pointer helpers and scene locators;
    prefer an API or fixture reset, otherwise use separately proven UI steps.
@@ -160,6 +162,7 @@ Before any take:
 - verify the output does not replace an existing final artifact;
 - use Playwright browser video, never a screenshot montage;
 - inject the visible pointer/click pulse and use watchable pointer travel;
+- use slow, smooth recorded scrolling unless the user requests a jump;
 - keep narration concurrent with actions and segmented by scene.
 
 Read [references/production-workflow.md](references/production-workflow.md)

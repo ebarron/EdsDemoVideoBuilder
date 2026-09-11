@@ -18,6 +18,7 @@ validation.
 - Duplicate accessible names ruled out:
 - Variable operation form/start/busy-complete/identity-change/error boundaries:
 - Actual scroll owners and anchors:
+- Smooth-scroll durations and any user-requested jump overrides:
 - Narration fractions that own each action:
 
 ## State baseline and restoration

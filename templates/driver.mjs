@@ -6,6 +6,7 @@ export default {
     todos: [
       'Prove each recorded locator is visible, unique, and scoped to a stable region.',
       'Align each action to its narration cue and implement two-phase async boundaries.',
+      'Use slow smooth scrolling for every recorded reveal and viewport change.',
       'Implement a meaningful state snapshot and independent restoration assertion.',
     ],
   },

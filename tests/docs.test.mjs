@@ -38,6 +38,8 @@ test('skill documents watchable and resilient driver defaults', () => {
     /busy-complete/,
     /restoration independent of recorded pointer helpers/,
     /Do not overlap rehearsals/,
+    /every recorded scroll slow and\s+smooth by default/,
+    /Jump only when the user explicitly requests it/,
     /duration as an optional\s+constraint, never as the quality goal/,
   ]) {
     assert.match(SKILL, pattern);
@@ -49,6 +51,8 @@ test('skill documents watchable and resilient driver defaults', () => {
     /sentence should own\s+the action/,
     /busy state appears, then it\s+clears/,
     /Recorded pointer, typing, and scene helpers are\s+intentionally unavailable/,
+    /default duration is 1\.6 seconds/,
+    /An explicit\s+`scroll: 'instant'`.+allowed only\s+when the user asks for a jump/s,
   ]) {
     assert.match(DRIVER_API, pattern);
   }
@@ -56,6 +60,8 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Never overlap rehearsals/,
     /probe that step directly/,
     /API or fixture\s+reset/,
+    /Every recorded scroll is slow and smooth by default/,
+    /Jump scrolling requires an explicit user\s+request/,
     /optional\s+constraint, not a quality target/,
   ]) {
     assert.match(WORKFLOW, pattern);

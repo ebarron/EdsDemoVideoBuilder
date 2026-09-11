@@ -34,6 +34,7 @@ command. Repair:
 - clipped targets;
 - missed initiating or completion events;
 - wrong nested scroll owners;
+- jump scrolling or automatic target reveals that skip visible travel;
 - non-progressive scroll samples;
 - state restoration mismatches.
 
@@ -60,6 +61,12 @@ Use the recorded interaction helpers for watchable behavior: pointer travel is
 about one second per target, and text the viewer should read is entered
 sequentially. Instant `fill()` remains appropriate for unrecorded setup,
 focused probes, and restoration.
+
+Every recorded scroll is slow and smooth by default, including bringing an
+offscreen click target into view and positioning generated content. Use the
+rAF helper rather than `scrollIntoViewIfNeeded()`, direct `scrollTop`
+assignment, or one large wheel event. Jump scrolling requires an explicit user
+request.
 
 Schedule actions at explicit narration fractions. A spoken sentence owns the
 click or typing it introduces; do not front-load all actions at scene start.
