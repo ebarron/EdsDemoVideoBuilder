@@ -1,0 +1,28 @@
+{
+  "name": "narrated-browser-demo-skill",
+  "version": "1.0.0",
+  "description": "Cursor skill for recording and validating narrated Playwright browser demos.",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ebarron/EdsDemoVideoBuilder.git"
+  },
+  "bin": {
+    "narrated-browser-demo": "scripts/demo.mjs"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@playwright/test": "1.63.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "ffmpeg-static": "5.3.0",
+    "js-yaml": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

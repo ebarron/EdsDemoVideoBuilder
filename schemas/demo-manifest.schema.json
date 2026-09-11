@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor.local/narrated-browser-demo/demo-manifest.schema.json",
+  "title": "Narrated browser demo manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "compatibility",
+    "id",
+    "script",
+    "scenePlan",
+    "driver",
+    "app",
+    "browser",
+    "auth",
+    "narration",
+    "timing",
+    "state",
+    "output"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "compatibility": {
+      "type": "string",
+      "pattern": "^>=1\\.0\\.0 <2\\.0\\.0$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "script": {
+      "$ref": "#/$defs/path"
+    },
+    "scenePlan": {
+      "$ref": "#/$defs/path"
+    },
+    "driver": {
+      "$ref": "#/$defs/path"
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "cwd", "lifecycle"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
+        "cwd": {
+          "$ref": "#/$defs/path"
+        },
+        "lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {
+              "enum": ["external", "command"]
+            },
+            "start": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "readyUrl": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://"
+            },
+            "readyTimeoutMs": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 600000,
+              "default": 60000
+            },
+            "stopSignal": {
+              "enum": ["SIGINT", "SIGTERM"],
+              "default": "SIGTERM"
+            },
+            "env": {
+              "$ref": "#/$defs/envRefs"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "mode": {
+                    "const": "command"
+                  }
+                }
+              },
+              "then": {
+                "required": ["start"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "browser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel", "viewport", "zoom", "colorScheme"],
+      "properties": {
+        "channel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "viewport": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 640,
+              "maximum": 7680
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 480,
+              "maximum": 4320
+            }
+          }
+        },
+        "zoom": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2
+        },
+        "colorScheme": {
+          "enum": ["light", "dark", "no-preference"]
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "env"],
+      "properties": {
+        "mode": {
+          "enum": ["none", "driver", "storage-state"]
+        },
+        "env": {
+          "$ref": "#/$defs/envRefs"
+        },
+        "storageStateEnv": {
+          "$ref": "#/$defs/envName"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "storage-state"
+              }
+            }
+          },
+          "then": {
+            "required": ["storageStateEnv"]
+          }
+        }
+      ]
+    },
+    "narration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "defaultOffsetSeconds", "audioFirst"],
+      "properties": {
+        "mode": {
+          "enum": ["macos-say", "clips", "reference", "silent"]
+        },
+        "voice": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rate": {
+          "type": "integer",
+          "minimum": 80,
+          "maximum": 400
+        },
+        "clipsDir": {
+          "$ref": "#/$defs/path"
+        },
+        "referenceFile": {
+          "$ref": "#/$defs/path"
+        },
+        "defaultOffsetSeconds": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "audioFirst": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "macos-say"
+              }
+            }
+          },
+          "then": {
+            "required": ["voice", "rate"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "clips"
+              }
+            }
+          },
+          "then": {
+            "required": ["clipsDir"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "reference"
+              }
+            }
+          },
+          "then": {
+            "required": ["referenceFile"]
+          }
+        }
+      ]
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rehearsalScale",
+        "compressionTargetSeconds",
+        "fastForwardLabel",
+        "tailPaddingMs"
+      ],
+      "properties": {
+        "rehearsalScale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "compressionTargetSeconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 30
+        },
+        "fastForwardLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "tailPaddingMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "mutatingActions"],
+      "properties": {
+        "policy": {
+          "enum": ["read-only", "restore"]
+        },
+        "mutatingActions": {
+          "type": "boolean"
+        },
+        "baseline": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workDir", "video", "contactSheet", "timeline", "notes"],
+      "properties": {
+        "workDir": {
+          "$ref": "#/$defs/path"
+        },
+        "video": {
+          "$ref": "#/$defs/path"
+        },
+        "contactSheet": {
+          "$ref": "#/$defs/path"
+        },
+        "timeline": {
+          "$ref": "#/$defs/path"
+        },
+        "notes": {
+          "$ref": "#/$defs/path"
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ffmpegEnv": {
+          "$ref": "#/$defs/envName"
+        }
+      }
+    },
+    "sceneHints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scene", "summary"],
+        "properties": {
+          "scene": {
+            "type": "string",
+            "minLength": 1
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "envName": {
+      "type": "string",
+      "pattern": "^[A-Z_][A-Z0-9_]*$"
+    },
+    "envRefs": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-zA-Z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/envName"
+      }
+    }
+  }
+}

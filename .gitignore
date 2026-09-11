@@ -1,0 +1,47 @@
+# Dependencies and package-manager state
+node_modules/
+.npm/
+.npmrc
+npm-debug.log*
+
+# Playwright reports, caches, and captures
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+**/*.webm
+**/*.har
+
+# Generated demo work and per-application output
+/demos/
+/output/
+/captures/
+/raw/
+**/scene-plan.json
+**/building-the-video.md
+**/*.bak-*
+**/*.tmp-*
+
+# Authentication and temporary browser state
+.env
+.env.*
+!.env.example
+**/.auth/
+**/auth-state*.json
+**/storage-state*.json
+**/*-storage-state.json
+
+# Video and audio artifacts
+**/*.mp4
+**/*.mov
+**/*.mkv
+**/*.avi
+**/*.aiff
+**/*.aif
+**/*.wav
+**/*.m4a
+**/*.mp3
+
+# OS/editor noise
+.DS_Store
+*.swp

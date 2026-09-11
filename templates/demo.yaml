@@ -1,0 +1,51 @@
+version: 1
+compatibility: ">=1.0.0 <2.0.0"
+id: {{ID}}
+script: {{SCRIPT}}
+scenePlan: ./scene-plan.json
+driver: ./driver.mjs
+
+app:
+  url: {{URL}}
+  cwd: {{APP_CWD}}
+  lifecycle:
+    mode: external
+
+browser:
+  channel: chromium
+  viewport:
+    width: 1920
+    height: 1080
+  zoom: 1
+  colorScheme: light
+
+auth:
+  mode: none
+  env: {}
+
+narration:
+  mode: macos-say
+  voice: Samantha
+  rate: 160
+  defaultOffsetSeconds: 0.5
+  audioFirst: false
+
+timing:
+  rehearsalScale: 0.15
+  compressionTargetSeconds: 2
+  fastForwardLabel: FAST FORWARD
+  tailPaddingMs: 400
+
+state:
+  policy: read-only
+  mutatingActions: false
+  baseline: Confirm the driver's snapshot is unchanged after the take.
+
+output:
+  workDir: /tmp/{{ID}}-demo
+  video: ./output/{{ID}}.mp4
+  contactSheet: ./output/{{ID}}-contact-sheet.png
+  timeline: ./output/{{ID}}-timeline.json
+  notes: ./building-the-video.md
+
+sceneHints: []
