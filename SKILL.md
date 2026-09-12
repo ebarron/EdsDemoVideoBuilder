@@ -112,19 +112,25 @@ directions can deterministically operate an arbitrary app. The agent must:
 3. Use the recorder's watchable `point`, `click`, and `typeText` helpers for
    viewer-facing interaction. Reserve instant `fill()` and direct DOM actions
    for unrecorded setup, probes, and restoration.
-4. Give each narrated cue ownership of its action with explicit
+4. Treat the visible pointer and real hit target as one contract. After every
+   scroll, expansion, canvas swap, or sticky-layout change, wait for a stable
+   box, measure, travel, remeasure, prove pointer overlap and the DOM hit
+   target, then click. Never use pixel fudges. Capture click-time evidence for
+   critical interactions, and never overlap scroll, pointer travel, typing, or
+   layout motion.
+5. Give each narrated cue ownership of its action with explicit
    `waitNarrationFraction` checkpoints instead of clustering clicks at the
    start of a scene.
-5. Implement each variable operation with initiating, busy/start,
+6. Implement each variable operation with initiating, busy/start,
    busy-complete, identity-change/success, and error boundaries.
-6. Identify the actual inner scroll owner. Make every recorded scroll slow and
+7. Identify the actual inner scroll owner. Make every recorded scroll slow and
    smooth by default, including automatic target reveals and viewport
    positioning. Use the runtime rAF scroll helper and verify progressive
    0/25/50/75/100 samples. Jump only when the user explicitly requests it.
-7. Implement snapshot, restore, and restoration verification hooks. Keep
+8. Implement snapshot, restore, and restoration verification hooks. Keep
    restoration independent of recorded pointer helpers and scene locators;
    prefer an API or fixture reset, otherwise use separately proven UI steps.
-8. Clear `status.todos` and set `productionReady: true` only after accelerated
+9. Clear `status.todos` and set `productionReady: true` only after accelerated
    rehearsal succeeds.
 
 Read [references/driver-api.md](references/driver-api.md) for the contract.
@@ -163,6 +169,7 @@ Before any take:
 - use Playwright browser video, never a screenshot montage;
 - inject the visible pointer/click pulse and use watchable pointer travel;
 - use slow, smooth recorded scrolling unless the user requests a jump;
+- prove critical clicks with pointer/target overlap and click-time evidence;
 - keep narration concurrent with actions and segmented by scene.
 
 Read [references/production-workflow.md](references/production-workflow.md)

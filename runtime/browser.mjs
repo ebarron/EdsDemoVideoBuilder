@@ -22,12 +22,16 @@ export function installDemoPointer() {
     document.head.append(style);
     const pointer = document.createElement('div');
     pointer.id = '__narrated_demo_pointer';
-    pointer.style.left = `${window.innerWidth / 2}px`;
-    pointer.style.top = `${window.innerHeight / 2}px`;
+    const place = (x, y) => {
+      const parsedZoom = Number.parseFloat(getComputedStyle(document.documentElement).zoom);
+      const zoom = Number.isFinite(parsedZoom) && parsedZoom > 0 ? parsedZoom : 1;
+      pointer.style.left = `${x / zoom}px`;
+      pointer.style.top = `${y / zoom}px`;
+    };
+    place(window.innerWidth / 2, window.innerHeight / 2);
     document.body.append(pointer);
     document.addEventListener('mousemove', (event) => {
-      pointer.style.left = `${event.clientX}px`;
-      pointer.style.top = `${event.clientY}px`;
+      place(event.clientX, event.clientY);
     }, true);
     document.addEventListener('mousedown', () => {
       pointer.classList.remove('clicking');
@@ -47,8 +51,16 @@ export function installDemoZoom(zoom) {
   else apply();
 }
 
-export function createBrowserHelpers({ page, timeline, pause, viewport, pace = 1 }) {
+export function createBrowserHelpers({
+  captureClickEvidence,
+  page,
+  timeline,
+  pause,
+  viewport,
+  pace = 1,
+}) {
   const defaultScrollDurationMs = 1_600;
+  let motionTail = Promise.resolve();
 
   async function uniqueVisibleTarget(locator, id = 'target') {
     let count = await locator.count();
@@ -63,6 +75,34 @@ export function createBrowserHelpers({ page, timeline, pause, viewport, pace = 1
     }
     await locator.waitFor({ state: 'visible', timeout: 30_000 });
     return locator;
+  }
+
+  async function stableBox(locator, id, {
+    intervalMs = 50,
+    samples = 3,
+    timeoutMs = 5_000,
+    tolerancePx = 0.75,
+  } = {}) {
+    const started = Date.now();
+    let previous;
+    let stableSamples = 0;
+    while (Date.now() - started < timeoutMs) {
+      const box = await locator.boundingBox();
+      if (!box) throw new Error(`No visible box for ${id}`);
+      const delta = previous
+        ? Math.max(
+            Math.abs(box.x - previous.x),
+            Math.abs(box.y - previous.y),
+            Math.abs(box.width - previous.width),
+            Math.abs(box.height - previous.height),
+          )
+        : Number.POSITIVE_INFINITY;
+      stableSamples = delta <= tolerancePx ? stableSamples + 1 : 1;
+      if (stableSamples >= samples) return box;
+      previous = box;
+      await page.waitForTimeout(intervalMs);
+    }
+    throw new Error(`Layout did not settle for ${id} within ${timeoutMs}ms`);
   }
 
   async function movePointer(x, y, { steps, travelMs }) {
@@ -91,11 +131,69 @@ export function createBrowserHelpers({ page, timeline, pause, viewport, pace = 1
     );
   }
 
+  function boxesMatch(left, right, tolerancePx) {
+    return Math.max(
+      Math.abs(left.x - right.x),
+      Math.abs(left.y - right.y),
+      Math.abs(left.width - right.width),
+      Math.abs(left.height - right.height),
+    ) <= tolerancePx;
+  }
+
+  async function verifyPointerHit(target, id, box) {
+    const proof = await target.evaluate((element, expectedBox) => {
+      const pointer = element.ownerDocument.getElementById('__narrated_demo_pointer');
+      if (!pointer) return { error: 'Visible demo pointer is missing' };
+      const pointerRect = pointer.getBoundingClientRect();
+      const targetRect = element.getBoundingClientRect();
+      const x = pointerRect.left + pointerRect.width / 2;
+      const y = pointerRect.top + pointerRect.height / 2;
+      const hit = element.ownerDocument.elementFromPoint(x, y);
+      const overlap =
+        x >= targetRect.left &&
+        x <= targetRect.right &&
+        y >= targetRect.top &&
+        y <= targetRect.bottom;
+      const hitMatches = Boolean(hit && (hit === element || element.contains(hit)));
+      return {
+        expectedBox,
+        hit: hit
+          ? {
+              ariaLabel: hit.getAttribute('aria-label'),
+              role: hit.getAttribute('role'),
+              tag: hit.tagName,
+            }
+          : null,
+        hitMatches,
+        overlap,
+        pointer: { x, y },
+        targetBox: {
+          x: targetRect.left,
+          y: targetRect.top,
+          width: targetRect.width,
+          height: targetRect.height,
+        },
+      };
+    }, box);
+    if (proof.error) throw new Error(`${id}: ${proof.error}`);
+    if (!proof.overlap || !proof.hitMatches) {
+      throw new Error(
+        `Visible pointer does not match the real hit target for ${id}: ${JSON.stringify(proof)}`,
+      );
+    }
+    return proof;
+  }
+
   async function point(locator, options = {}) {
     const {
       hold = 650,
       id,
+      layoutIntervalMs = 50,
+      layoutSamples = 3,
+      layoutTimeoutMs = 5_000,
+      layoutTolerancePx = 0.75,
       mark = true,
+      maxRealignments = 2,
       scroll = 'smooth',
       scrollDurationMs = defaultScrollDurationMs,
       scrollOffset = 100,
@@ -103,8 +201,14 @@ export function createBrowserHelpers({ page, timeline, pause, viewport, pace = 1
       travelMs = 900,
     } = typeof options === 'number' ? { hold: options } : options;
     const target = await uniqueVisibleTarget(locator, id ?? 'pointer target');
-    let box = await target.boundingBox();
-    if (!box) throw new Error(`No visible box for ${id ?? 'pointer target'}`);
+    const targetId = id ?? 'pointer target';
+    const stability = {
+      intervalMs: layoutIntervalMs,
+      samples: layoutSamples,
+      timeoutMs: layoutTimeoutMs,
+      tolerancePx: layoutTolerancePx,
+    };
+    let box = await stableBox(target, targetId, stability);
     if (isClipped(box) && scroll) {
       if (scroll === 'instant') {
         await target.scrollIntoViewIfNeeded();
@@ -115,20 +219,33 @@ export function createBrowserHelpers({ page, timeline, pause, viewport, pace = 1
           offset: scrollOffset,
         });
       }
-      box = await target.boundingBox();
-      if (!box) throw new Error(`No visible box for ${id ?? 'pointer target'} after scrolling`);
+      box = await stableBox(target, targetId, stability);
     }
     if (isClipped(box)) {
       throw new Error(`Pointer target is clipped for ${id ?? 'unknown'}: ${JSON.stringify(box)}`);
     }
-    await movePointer(box.x + box.width / 2, box.y + box.height / 2, { steps, travelMs });
+    let aligned = false;
+    for (let attempt = 0; attempt <= maxRealignments; attempt += 1) {
+      await movePointer(box.x + box.width / 2, box.y + box.height / 2, { steps, travelMs });
+      if (attempt === 0) await pause(hold);
+      const latest = await stableBox(target, targetId, stability);
+      if (boxesMatch(box, latest, layoutTolerancePx)) {
+        box = latest;
+        aligned = true;
+        break;
+      }
+      box = latest;
+    }
+    if (!aligned) {
+      throw new Error(`Target kept moving during pointer travel for ${targetId}`);
+    }
     if (id && mark) timeline.markAction(id, 'point', { box });
-    await pause(hold);
     return box;
   }
 
   async function click(locator, id, options = {}) {
     const {
+      evidence = false,
       hold = 450,
       downMs = 110,
       scroll = 'smooth',
@@ -136,10 +253,12 @@ export function createBrowserHelpers({ page, timeline, pause, viewport, pace = 1
       scrollOffset = 100,
       steps = 28,
       travelMs = 900,
+      ...stability
     } = typeof options === 'number' ? { hold: options } : options;
     const box = await point(locator, {
       hold: 250,
       id,
+      ...stability,
       mark: false,
       scroll,
       scrollDurationMs,
@@ -147,10 +266,21 @@ export function createBrowserHelpers({ page, timeline, pause, viewport, pace = 1
       steps,
       travelMs,
     });
-    const event = timeline.markAction(id, 'click', { box });
+    const target = await uniqueVisibleTarget(locator, id);
+    const proof = await verifyPointerHit(target, id, box);
+    const event = timeline.markAction(id, 'click', { box, pointerProof: proof });
     await page.mouse.down();
-    await pause(downMs);
-    await page.mouse.up();
+    try {
+      if (evidence) {
+        if (!captureClickEvidence) {
+          throw new Error(`Click evidence was requested for ${id}, but no capture hook is available`);
+        }
+        event.evidenceFile = await captureClickEvidence(id);
+      }
+      await pause(downMs);
+    } finally {
+      await page.mouse.up();
+    }
     const up = timeline.elapsed();
     await pause(hold);
     return { down: event.at, up, box };
@@ -161,6 +291,11 @@ export function createBrowserHelpers({ page, timeline, pause, viewport, pace = 1
       clear = false,
       delayMs = 55,
       hold = 350,
+      layoutIntervalMs = 50,
+      layoutSamples = 3,
+      layoutTimeoutMs = 5_000,
+      layoutTolerancePx = 0.75,
+      maxRealignments = 2,
       scroll = 'smooth',
       scrollDurationMs = defaultScrollDurationMs,
       scrollOffset = 100,
@@ -169,10 +304,21 @@ export function createBrowserHelpers({ page, timeline, pause, viewport, pace = 1
     const target = await uniqueVisibleTarget(locator, id);
     await click(target, `${id}.focus`, {
       hold: 150,
+      layoutIntervalMs,
+      layoutSamples,
+      layoutTimeoutMs,
+      layoutTolerancePx,
+      maxRealignments,
       scroll,
       scrollDurationMs,
       scrollOffset,
       travelMs,
+    });
+    await stableBox(target, `${id}.typing`, {
+      intervalMs: layoutIntervalMs,
+      samples: layoutSamples,
+      timeoutMs: layoutTimeoutMs,
+      tolerancePx: layoutTolerancePx,
     });
     if (clear) {
       await target.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
@@ -323,5 +469,18 @@ export function createBrowserHelpers({ page, timeline, pause, viewport, pace = 1
     return result;
   }
 
-  return { point, click, typeText, scrollMetrics, positionAtTop, smoothScroll };
+  function serializeMotion(action) {
+    const result = motionTail.then(action, action);
+    motionTail = result.catch(() => {});
+    return result;
+  }
+
+  return {
+    point: (...args) => serializeMotion(() => point(...args)),
+    click: (...args) => serializeMotion(() => click(...args)),
+    typeText: (...args) => serializeMotion(() => typeText(...args)),
+    scrollMetrics,
+    positionAtTop: (...args) => serializeMotion(() => positionAtTop(...args)),
+    smoothScroll: (...args) => serializeMotion(() => smoothScroll(...args)),
+  };
 }

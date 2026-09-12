@@ -110,6 +110,11 @@ and action timing aligned to the relevant spoken cue. Jump scrolling is used
 only when you explicitly request it. The skill favors comprehension over a
 fixed duration; a duration request is treated as an optional constraint.
 
+Before a click, the runtime waits for layout to settle, remeasures after
+pointer travel, and verifies that the visible pointer overlaps the browser's
+real hit target. Critical clicks can retain click-time screenshot evidence;
+successful navigation alone is not considered proof of visual alignment.
+
 It may infer the login flow and required environment-variable names, but it
 must **never** guess or persist credential values. It asks you if credentials
 are needed. The default state policy is read-only. If the script requests a

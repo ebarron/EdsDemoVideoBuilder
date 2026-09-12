@@ -19,6 +19,8 @@ validation.
 - Variable operation form/start/busy-complete/identity-change/error boundaries:
 - Actual scroll owners and anchors:
 - Smooth-scroll durations and any user-requested jump overrides:
+- Stable-layout boundaries before pointer travel:
+- Critical click evidence and pointer/target overlap review:
 - Narration fractions that own each action:
 
 ## State baseline and restoration

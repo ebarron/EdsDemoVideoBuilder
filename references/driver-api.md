@@ -37,13 +37,15 @@ The important values and helpers are:
 - `page`, `context`, `manifest`, `scenePlan`, `secrets`, `workDir`,
   `rehearsal`;
 - `pause(ms)`: scaled in rehearsal;
-- `point(locator, {id, hold, scroll, scrollDurationMs, scrollOffset, steps,
-  travelMs})`;
-- `click(locator, id, {hold, downMs, scroll, scrollDurationMs, scrollOffset,
-  steps, travelMs})`, returning `{down, up, box}`;
+- `point(locator, {id, hold, layoutIntervalMs, layoutSamples,
+  layoutTimeoutMs, layoutTolerancePx, maxRealignments, scroll,
+  scrollDurationMs, scrollOffset, steps, travelMs})`;
+- `click(locator, id, {evidence, hold, downMs, scroll, scrollDurationMs,
+  scrollOffset, steps, travelMs, ...layoutOptions})`, returning
+  `{down, up, box}`;
 - `typeText(locator, text, id, {clear, delayMs, hold, scroll,
-  scrollDurationMs, scrollOffset, travelMs})` for viewer-facing sequential
-  typing;
+  scrollDurationMs, scrollOffset, travelMs, ...layoutOptions})` for
+  viewer-facing sequential typing;
 - `startNarration(id, {start, anchor})` and
   `waitNarrationFraction(entry, fraction)`;
 - `scene(id, action)`, which starts narration, runs the action concurrently,
@@ -74,6 +76,37 @@ container that expresses the intended target.
 `typeText` focuses visibly and types sequentially. Use instant `fill()` only
 when the input is not meant to be read, such as unrecorded setup, a targeted
 probe, or restoration. Never type credentials in the recorded context.
+
+## Stable layout and pointer-hit contract
+
+Recorded motion follows one sequence:
+
+```text
+settle → measure → travel → settle and remeasure → verify overlap/hit target → click
+```
+
+The runtime requires three stable box samples before travel. If an accordion,
+canvas swap, sticky header, or other layout motion changes the box during
+travel, it moves the pointer to the new center and checks again. A target that
+keeps moving rejects the take.
+
+Immediately before mouse-down, the runtime proves that the drawn pointer
+overlaps the latest target box and that `elementFromPoint()` resolves to the
+target or one of its descendants. This check uses the browser's rendered
+coordinate space, including page zoom. A functional click with a visibly
+misaligned pointer is a failed click; never compensate with hard-coded pixel
+offsets.
+
+All recorded motion helpers share a queue, so scroll, pointer travel, viewport
+positioning, and typing cannot overlap each other. Drivers must also await the
+rendered completion boundary of any external layout transition before starting
+the next helper.
+
+Set `evidence: true` on each critical `click`. While mouse-down keeps the
+pointer pulse visible, the runtime saves a screenshot under
+`<workDir>/click-evidence/` and records its path plus pointer/target geometry in
+`timeline.json`. Review this evidence for the essential clicks; a green
+functional rehearsal alone does not prove visual alignment.
 
 ## Narration ownership
 

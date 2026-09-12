@@ -35,6 +35,8 @@ command. Repair:
 - missed initiating or completion events;
 - wrong nested scroll owners;
 - jump scrolling or automatic target reveals that skip visible travel;
+- pointer overlays that do not overlap the real click target;
+- layout motion that continues while a box is measured or a pointer travels;
 - non-progressive scroll samples;
 - state restoration mismatches.
 
@@ -67,6 +69,19 @@ offscreen click target into view and positioning generated content. Use the
 rAF helper rather than `scrollIntoViewIfNeeded()`, direct `scrollTop`
 assignment, or one large wheel event. Jump scrolling requires an explicit user
 request.
+
+Treat the visible pointer and real browser hit as one product surface. Sequence
+every interaction as settle, measure, travel, settle and remeasure, verify
+pointer overlap and `elementFromPoint()`, then click. If layout changes during
+travel, realign or reject the take; never add a pixel fudge. Recorded motion
+helpers are serialized so scrolling, pointer movement, viewport positioning,
+and typing do not overlap.
+
+Mark essential clicks for click-time evidence. Inspect the screenshot with the
+pointer pulse on and confirm the saved pointer/target geometry overlaps for
+navigation, expandable groups, selected rows, action controls, and inputs
+critical to that demo. Driver exit status proves function, not visual
+alignment.
 
 Schedule actions at explicit narration fractions. A spoken sentence owns the
 click or typing it introduces; do not front-load all actions at scene start.

@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import { chromium } from '@playwright/test';
 import ffmpeg from 'ffmpeg-static';
 
+import { createBrowserHelpers, installDemoPointer } from '../runtime/browser.mjs';
+
 assert.ok(ffmpeg && fs.existsSync(ffmpeg), 'Package-local FFmpeg binary is missing');
 const ffmpegVersion = spawnSync(ffmpeg, ['-version'], { encoding: 'utf8' });
 assert.equal(
@@ -19,10 +21,49 @@ let browser;
 try {
   browser = await chromium.launch();
   const page = await browser.newPage();
-  await page.setContent('<title>demo-video-builder smoke test</title>');
+  await page.setContent(`
+    <title>demo-video-builder smoke test</title>
+    <style>html { zoom: 1.25; }</style>
+    <button
+      aria-label="Pointer target"
+      onclick="document.body.dataset.clicked = 'true'"
+      style="position: absolute; left: 120px; top: 100px"
+    >Target</button>
+  `);
+  await page.evaluate(installDemoPointer);
   assert.equal(await page.title(), 'demo-video-builder smoke test');
+  const timeline = {
+    actions: [],
+    scrolls: [],
+    elapsed: () => 0,
+    markAction(id, kind, details) {
+      const entry = { id, kind, at: 0, ...details };
+      this.actions.push(entry);
+      return entry;
+    },
+  };
+  const helpers = createBrowserHelpers({
+    page,
+    timeline,
+    pause: (milliseconds) => page.waitForTimeout(milliseconds),
+    viewport: page.viewportSize(),
+  });
+  await helpers.click(
+    page.getByRole('button', { name: 'Pointer target' }),
+    'smoke.pointer-target',
+    {
+      downMs: 0,
+      hold: 0,
+      layoutIntervalMs: 1,
+      layoutSamples: 2,
+      travelMs: 0,
+    },
+  );
+  assert.equal(await page.locator('body').getAttribute('data-clicked'), 'true');
+  assert.equal(timeline.actions.at(-1).pointerProof.overlap, true);
+  assert.equal(timeline.actions.at(-1).pointerProof.hitMatches, true);
 } finally {
   await browser?.close();
 }
 
-console.log('Playwright Chromium and package-local FFmpeg are ready.');
+console.log('Playwright pointer alignment, Chromium, and package-local FFmpeg are ready.');

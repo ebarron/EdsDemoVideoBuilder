@@ -219,7 +219,19 @@ export async function runDemo(manifest, {
     let driverContext;
     const pause = (milliseconds) =>
       page.waitForTimeout(Math.max(0, milliseconds * narration.pace));
+    const captureClickEvidence = async (id) => {
+      const evidenceDir = path.join(workDir, 'click-evidence');
+      fs.mkdirSync(evidenceDir, { recursive: true, mode: 0o700 });
+      const safeId = String(id).replace(/[^a-z0-9._-]+/gi, '-');
+      const file = path.join(
+        evidenceDir,
+        `${String(timeline.actions.length).padStart(3, '0')}-${safeId}.png`,
+      );
+      await page.screenshot({ path: file, animations: 'allow' });
+      return file;
+    };
     const helpers = createBrowserHelpers({
+      captureClickEvidence,
       page,
       timeline,
       pause,
