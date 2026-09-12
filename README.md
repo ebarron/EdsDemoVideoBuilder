@@ -163,9 +163,17 @@ Edit only the Markdown script, then paste:
 > validate, and open the output. Preserve and restore app state, ask before
 > writes, and do not store literal secrets.
 
-Wording-only edits usually change narration without changing browser actions.
-Added or changed stage directions may require Cursor to inspect the UI, repair
-the affected actions, and rehearse again.
+The skill classifies the diff internally; you do not need to label it.
+Wording-only edits update narration without changing the driver. Added or
+changed stage directions may require Cursor to inspect the UI, repair the
+affected actions, and rehearse again. You may state “this is narration-only”
+when that intent is useful, but the skill still verifies the diff.
+
+For frequently revised demos, explicit stable scene/action IDs keep identity
+across copy changes. Keep spoken copy and stage directions separate. If a late
+scene invokes an expensive API or LLM, optionally provide isolated seeded state
+and its reset procedure so Cursor can probe that scene before the final
+end-to-end rehearsal.
 
 ## Using your own voice
 

@@ -11,6 +11,12 @@ validation.
 - Browser, viewport, theme, and zoom:
 - Isolated fixture or state:
 
+## Latest change classification
+
+- Sync classification:
+- Additional locator/layout or functional evidence:
+- Driver impact and reason:
+
 ## Proven locators and boundaries
 
 - Starting view:

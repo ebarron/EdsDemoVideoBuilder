@@ -51,6 +51,8 @@ test('README links resolve and prompt states safety gates', () => {
     /\/demo-video-builder The video is close\./,
     /never\*\* guess or persist credential values/i,
     /asks for explicit authorization and restoration requirements/,
+    /classifies the diff internally; you do not need to label it/,
+    /Wording-only edits update narration without changing the driver/,
     /gh repo clone ebarron\/EdsDemoVideoBuilder "\$HOME\/\.cursor\/skills\/demo-video-builder"/,
     /"\$HOME\/\.cursor\/skills\/demo-video-builder\/scripts\/install\.sh"/,
     /git -C "\$HOME\/\.cursor\/skills\/demo-video-builder" pull --ff-only/,

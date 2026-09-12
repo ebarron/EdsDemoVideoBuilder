@@ -30,6 +30,32 @@ agent reviews changed actions and rehearsal failures, inspects the actual
 accessibility tree/DOM, edits locators and boundaries here, and rehearses
 again.
 
+## Driver organization
+
+Keep product-specific semantic targets separate from scene choreography. A
+small locator factory is enough; a large page-object framework is not
+required:
+
+```js
+function productTargets(page) {
+  const navigation = page.getByRole('navigation', { name: 'Primary' });
+  const canvas = page.getByRole('main');
+  return {
+    navigation: {
+      inventory: navigation.getByRole('link', { name: 'Inventory', exact: true }),
+    },
+    alertRule: {
+      explainAndEdit: canvas.getByRole('button', { name: 'Explain & edit', exact: true }),
+    },
+  };
+}
+```
+
+Create the targets in `run()` and use semantic names in scene actions. When the
+product layout changes, repair the factory once. Keep stable mechanics in the
+runtime helpers; do not copy click, scroll, typing, settling, zoom, or evidence
+logic into the product driver.
+
 ## Context
 
 The important values and helpers are:

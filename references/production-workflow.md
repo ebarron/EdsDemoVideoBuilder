@@ -22,6 +22,13 @@ storage state in memory. If an existing state file is supplied, require mode
 
 ## 4. Rehearse cheaply
 
+Before editing the driver, classify the change from sync output and runtime
+evidence. Narration-only changes do not touch `driver.mjs`; timing-only changes
+do not touch locators. Choreography changes alter actions, locator/layout
+changes repair the driver's semantic target factory, and functional changes
+repair boundaries or state handling. Infer and report this internally without
+requiring the user to complete a classification step.
+
 Run structural preflight and accelerated rehearsal before generating speech or
 browser video. Preflight deliberately allows an incomplete
 `productionReady: false` driver: readiness is reported separately as

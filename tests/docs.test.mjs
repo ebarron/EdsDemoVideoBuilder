@@ -14,6 +14,10 @@ const MARKDOWN = [
 ];
 const SKILL = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8');
 const DRIVER_API = fs.readFileSync(path.join(ROOT, 'references', 'driver-api.md'), 'utf8');
+const SCRIPT_CONVENTION = fs.readFileSync(
+  path.join(ROOT, 'references', 'script-convention.md'),
+  'utf8',
+);
 const WORKFLOW = fs.readFileSync(path.join(ROOT, 'references', 'production-workflow.md'), 'utf8');
 
 test('local Markdown links resolve', () => {
@@ -43,6 +47,9 @@ test('skill documents watchable and resilient driver defaults', () => {
     /wait for a stable\s+box, measure, travel, remeasure, prove pointer overlap/,
     /Capture click-time evidence for\s+critical interactions/,
     /never overlap scroll, pointer travel, typing, or\s+layout motion/,
+    /Do not ask the user to label ordinary edits/,
+    /narration-only.+do not edit\s+`driver\.mjs`/s,
+    /semantic targets in one locator factory or page\s+object/,
     /duration as an optional\s+constraint, never as the quality goal/,
   ]) {
     assert.match(SKILL, pattern);
@@ -64,6 +71,13 @@ test('skill documents watchable and resilient driver defaults', () => {
     assert.match(DRIVER_API, pattern);
   }
   for (const pattern of [
+    /Users do not need to classify changes/,
+    /Moving an unchanged stage direction.+not\s+a choreography change/s,
+    /isolated seed\/setup and reset procedure/,
+  ]) {
+    assert.match(SCRIPT_CONVENTION, pattern);
+  }
+  for (const pattern of [
     /Never overlap rehearsals/,
     /probe that step directly/,
     /API or fixture\s+reset/,
@@ -71,6 +85,7 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Jump scrolling requires an explicit user\s+request/,
     /realign or reject the take; never add a pixel fudge/,
     /Driver exit status proves function, not visual\s+alignment/,
+    /Infer and report this internally without\s+requiring the user/,
     /optional\s+constraint, not a quality target/,
   ]) {
     assert.match(WORKFLOW, pattern);

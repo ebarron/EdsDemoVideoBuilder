@@ -5,6 +5,7 @@ export default {
     mutatesState: false,
     todos: [
       'Prove each recorded locator is visible, unique, and scoped to a stable region.',
+      'Keep semantic product targets in one locator factory separate from choreography.',
       'Mark critical clicks for pointer-overlap and click-time evidence review.',
       'Align each action to its narration cue and implement two-phase async boundaries.',
       'Use slow smooth scrolling for every recorded reveal and viewport change.',

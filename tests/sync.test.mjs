@@ -37,7 +37,10 @@ test('sync preserves scene IDs for wording-only changes', () => {
   original.scenes[0].id = 'intro';
   original.scenes[0].actions[0].id = 'show-dashboard';
   fs.writeFileSync(files.plan, `${JSON.stringify(original, null, 2)}\n`);
-  fs.writeFileSync(files.script, '# Opening\n\nImproved spoken words.\n\n*[Open dashboard.]*\n');
+  fs.writeFileSync(
+    files.script,
+    '# Opening\n\nImproved spoken words.\n\nA second sentence.\n\n*[Open dashboard.]*\n',
+  );
 
   const result = syncScenePlan({ manifestPath: files.manifest });
   assert.equal(result.mode, 'preview');
@@ -46,6 +49,11 @@ test('sync preserves scene IDs for wording-only changes', () => {
   assert.equal(result.plan.scenes[0].actions[0].id, 'show-dashboard');
   assert.deepEqual(result.diff.scenes.changed, [{ id: 'intro', fields: ['narration'] }]);
   assert.deepEqual(result.diff.actions.changed, []);
+  assert.deepEqual(result.diff.classification, {
+    label: 'narration-only',
+    kinds: ['narration'],
+    driverReviewRequired: false,
+  });
 });
 
 test('sync reports changed directions while preserving action IDs', () => {
@@ -58,6 +66,29 @@ test('sync reports changed directions while preserving action IDs', () => {
   assert.equal(result.plan.scenes[0].actions[0].id, actionId);
   assert.deepEqual(result.diff.actions.changed, [`proof/${actionId}`]);
   assert.deepEqual(result.diff.scenes.changed, [{ id: 'proof', fields: ['actions'] }]);
+  assert.deepEqual(result.diff.classification, {
+    label: 'choreography-only',
+    kinds: ['choreography'],
+    driverReviewRequired: true,
+  });
+});
+
+test('sync classifies explicit timing changes without requiring driver review', () => {
+  const files = fixture(
+    '<!-- demo:scene {"id":"opening","timing":{"duration":10}} -->\n\nOriginal words.\n',
+  );
+  fs.writeFileSync(
+    files.script,
+    '<!-- demo:scene {"id":"opening","timing":{"duration":14}} -->\n\nOriginal words.\n',
+  );
+
+  const result = syncScenePlan({ manifestPath: files.manifest });
+  assert.deepEqual(result.diff.scenes.changed, [{ id: 'opening', fields: ['timing'] }]);
+  assert.deepEqual(result.diff.classification, {
+    label: 'timing-only',
+    kinds: ['timing'],
+    driverReviewRequired: false,
+  });
 });
 
 test('sync excludes appendices, internal notes, and captions', () => {

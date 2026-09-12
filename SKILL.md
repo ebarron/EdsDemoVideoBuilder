@@ -91,6 +91,24 @@ explicit ID, action text, or action ID gives a deterministic match. Default
 parser exclusions remove appendices, Building the video/internal notes, and
 caption sections from narration.
 
+Before editing generated artifacts, classify the change internally. The sync
+preview labels deterministic script changes; supplement it with live evidence:
+
+- **narration-only** changes update the plan/audio and do not edit
+  `driver.mjs`;
+- **timing-only** changes update cue checkpoints or timing values, not
+  locators;
+- **choreography** changes add, remove, reorder, or alter browser actions;
+- **locator/layout** changes repair semantic targets after observed UI drift;
+- **functional** changes update event boundaries, state handling, or
+  restoration after observed behavior changes.
+
+Classifications may combine. Do not ask the user to label ordinary edits;
+infer them from the sync diff, driver, and running app, then report the result.
+Only ask when ambiguity materially affects safety or output. If a
+narration-only request coincides with unrelated app drift, describe that drift
+separately rather than attributing driver churn to the copy edit.
+
 If a legacy hand-curated plan previews broad structural churn because its
 scene splits are absent from Markdown, do not write. Add explicit stable scene
 comments or reconcile the segmentation first.
@@ -109,28 +127,31 @@ directions can deterministically operate an arbitrary app. The agent must:
    recorded locator is visible and unique. Scope repeated labels to a stable
    region such as navigation, canvas, dialog, or chat; never hide ambiguity
    with `.first()` or `.nth()`.
-3. Use the recorder's watchable `point`, `click`, and `typeText` helpers for
+3. Keep product-specific semantic targets in one locator factory or page
+   object, separate from scene timing and choreography. A layout change should
+   normally repair one target definition, not every scene that uses it.
+4. Use the recorder's watchable `point`, `click`, and `typeText` helpers for
    viewer-facing interaction. Reserve instant `fill()` and direct DOM actions
    for unrecorded setup, probes, and restoration.
-4. Treat the visible pointer and real hit target as one contract. After every
+5. Treat the visible pointer and real hit target as one contract. After every
    scroll, expansion, canvas swap, or sticky-layout change, wait for a stable
    box, measure, travel, remeasure, prove pointer overlap and the DOM hit
    target, then click. Never use pixel fudges. Capture click-time evidence for
    critical interactions, and never overlap scroll, pointer travel, typing, or
    layout motion.
-5. Give each narrated cue ownership of its action with explicit
+6. Give each narrated cue ownership of its action with explicit
    `waitNarrationFraction` checkpoints instead of clustering clicks at the
    start of a scene.
-6. Implement each variable operation with initiating, busy/start,
+7. Implement each variable operation with initiating, busy/start,
    busy-complete, identity-change/success, and error boundaries.
-7. Identify the actual inner scroll owner. Make every recorded scroll slow and
+8. Identify the actual inner scroll owner. Make every recorded scroll slow and
    smooth by default, including automatic target reveals and viewport
    positioning. Use the runtime rAF scroll helper and verify progressive
    0/25/50/75/100 samples. Jump only when the user explicitly requests it.
-8. Implement snapshot, restore, and restoration verification hooks. Keep
+9. Implement snapshot, restore, and restoration verification hooks. Keep
    restoration independent of recorded pointer helpers and scene locators;
    prefer an API or fixture reset, otherwise use separately proven UI steps.
-9. Clear `status.todos` and set `productionReady: true` only after accelerated
+10. Clear `status.todos` and set `productionReady: true` only after accelerated
    rehearsal succeeds.
 
 Read [references/driver-api.md](references/driver-api.md) for the contract.

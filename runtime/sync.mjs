@@ -106,6 +106,40 @@ function actionMap(scene) {
   }));
 }
 
+function semanticAction(action) {
+  const { sourceLine: _sourceLine, ...semantic } = action;
+  return semantic;
+}
+
+export function classifyPlanChanges(diff) {
+  const changedFields = diff.scenes.changed.flatMap(({ fields }) => fields);
+  const narration = changedFields.includes('narration');
+  const timing = changedFields.includes('timing');
+  const choreography =
+    diff.scenes.added.length > 0 ||
+    diff.scenes.removed.length > 0 ||
+    changedFields.some((field) => field === 'title' || field === 'actions') ||
+    diff.actions.added.length > 0 ||
+    diff.actions.removed.length > 0 ||
+    diff.actions.changed.length > 0;
+  const kinds = [
+    ...(narration ? ['narration'] : []),
+    ...(timing ? ['timing'] : []),
+    ...(choreography ? ['choreography'] : []),
+  ];
+  if (kinds.length === 0 && diff.sourceChanged) kinds.push('source-only');
+  const label = kinds.length === 0
+    ? 'none'
+    : kinds.length === 1
+      ? `${kinds[0]}-only`
+      : kinds.join('+');
+  return {
+    label,
+    kinds,
+    driverReviewRequired: choreography,
+  };
+}
+
 export function diffScenePlans(previous, next) {
   const oldScenes = new Map(previous.scenes.map((scene) => [scene.id, scene]));
   const newScenes = new Map(next.scenes.map((scene) => [scene.id, scene]));
@@ -123,6 +157,9 @@ export function diffScenePlans(previous, next) {
     const fields = [];
     if (old.title !== scene.title) fields.push('title');
     if (old.narration !== scene.narration) fields.push('narration');
+    if (JSON.stringify(old.timing ?? null) !== JSON.stringify(scene.timing ?? null)) {
+      fields.push('timing');
+    }
     const oldActions = actionMap(old);
     const newActions = actionMap(scene);
     let actionChanged = false;
@@ -132,7 +169,7 @@ export function diffScenePlans(previous, next) {
         actions.added.push(`${id}/${actionId}`);
         actionChanged = true;
       }
-      else if (JSON.stringify(prior) !== JSON.stringify(action)) {
+      else if (JSON.stringify(semanticAction(prior)) !== JSON.stringify(semanticAction(action))) {
         actions.changed.push(`${id}/${actionId}`);
         actionChanged = true;
       }
@@ -152,7 +189,7 @@ export function diffScenePlans(previous, next) {
     }
   }
 
-  return {
+  const diff = {
     sourceChanged: previous.sourceHash !== next.sourceHash,
     scenes: { added, removed, changed },
     actions,
@@ -164,6 +201,8 @@ export function diffScenePlans(previous, next) {
       actions.changed.length > 0 ||
       previous.sourceHash !== next.sourceHash,
   };
+  diff.classification = classifyPlanChanges(diff);
+  return diff;
 }
 
 function backupPath(file) {

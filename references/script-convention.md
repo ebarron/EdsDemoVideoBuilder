@@ -52,7 +52,8 @@ node scripts/demo.mjs sync --manifest path/to/demo.yaml
 node scripts/demo.mjs sync --manifest path/to/demo.yaml --write
 ```
 
-The first command reports scene/action additions, removals, and changes.
+The first command reports scene/action additions, removals, and changes plus
+an internal classification and whether driver review is required.
 `--write` backs up the existing plan and atomically replaces it; `--check`
 exits nonzero when drift exists. The generated plan stores a SHA-256 source
 hash. Stable scene/action IDs and custom hints are preserved when matching is
@@ -63,10 +64,23 @@ the Markdown. If preview reports broad structural churn, stop before
 `--write`; add explicit `demo:scene` comments or have the agent reconcile that
 segmentation first.
 
-Wording changes update narration but do not require a locator change. Changed,
-added, or removed stage directions require the agent to compare the affected
-actions with `driver.mjs`, inspect the live app, edit the driver, and rehearse.
-The CLI validates this work; it does not pretend to repair arbitrary selectors.
+Wording changes update narration but do not require a driver or locator
+change. Moving an unchanged stage direction to another source line is also not
+a choreography change. Changed, added, or removed stage directions require the
+agent to compare the affected actions with `driver.mjs`, inspect the live app,
+edit the driver, and rehearse. The CLI validates this work; it does not pretend
+to repair arbitrary selectors.
+
+Users do not need to classify changes. Plain requests such as “I revised the
+narration; resynchronize and rerecord” are sufficient. Stating the intended
+change type is optional and helps detect accidental churn, but runtime evidence
+still wins.
+
+For demos that will be revised repeatedly, use explicit stable scene and
+action IDs. Keep spoken copy in paragraphs and browser behavior in separate
+stage directions so narration edits do not look like choreography edits. For
+an expensive late scene, provide an isolated seed/setup and reset procedure and
+ask for a targeted probe before the final full rehearsal.
 
 ## Timing
 
