@@ -54,6 +54,12 @@ function browserLaunchOptions(channel) {
   return channel && channel !== 'chromium' ? { channel } : {};
 }
 
+export function browserTlsOptions(manifest) {
+  return {
+    ignoreHTTPSErrors: Boolean(manifest.app.allowInsecureTls),
+  };
+}
+
 function authSecrets(manifest, environment) {
   const refs = Object.entries(manifest.auth.env ?? {}).map(([logicalName, environmentName]) => ({
     logicalName,
@@ -184,6 +190,7 @@ export async function runDemo(manifest, {
       viewport: manifest.browser.viewport,
       storageState: readStorageState(manifest, environment),
       colorScheme: manifest.browser.colorScheme,
+      ...browserTlsOptions(manifest),
     });
     const prepPage = await prepContext.newPage();
     const prepBase = { page: prepPage, context: prepContext, manifest, secrets, rehearsal };
@@ -203,6 +210,7 @@ export async function runDemo(manifest, {
       viewport: manifest.browser.viewport,
       storageState,
       colorScheme: manifest.browser.colorScheme,
+      ...browserTlsOptions(manifest),
     };
     if (!rehearsal) {
       contextOptions.recordVideo = {

@@ -20,6 +20,11 @@ secrets only through environment references. The runtime keeps generated
 storage state in memory. If an existing state file is supplied, require mode
 0600 and never copy it into project output.
 
+Keep TLS verification strict unless the manifest explicitly enables
+`app.allowInsecureTls` for a known self-signed demo endpoint. The same
+manifest-scoped choice applies to preflight, lifecycle readiness,
+authentication/preparation, and recording. Never set a process-wide TLS bypass.
+
 ## 4. Rehearse cheaply
 
 Before editing the driver, classify the change from sync output and runtime

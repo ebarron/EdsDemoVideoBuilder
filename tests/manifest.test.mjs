@@ -54,6 +54,18 @@ test('accepts environment references and version compatibility', () => {
   assert.deepEqual(validateManifestObject(manifest()), { valid: true, errors: [] });
 });
 
+test('accepts only a boolean per-demo insecure TLS option', () => {
+  const enabled = manifest();
+  enabled.app.allowInsecureTls = true;
+  assert.equal(validateManifestObject(enabled).valid, true);
+
+  const invalid = manifest();
+  invalid.app.allowInsecureTls = 'true';
+  const result = validateManifestObject(invalid);
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join('\n'), /allowInsecureTls.+boolean/);
+});
+
 test('rejects literal secrets and unknown fields', () => {
   const value = manifest();
   value.auth.password = 'do-not-accept';

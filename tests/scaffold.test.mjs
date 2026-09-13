@@ -31,7 +31,9 @@ test('generates manifest, driver, normalized plan, and notes without overwrite',
     JSON.parse(fs.readFileSync(path.join(output, 'scene-plan.json'), 'utf8')).sourceHash,
     /^sha256:[a-f0-9]{64}$/,
   );
-  assert.equal(loadManifest(path.join(output, 'demo.yaml')).manifest.id, 'example-demo');
+  const generatedManifest = loadManifest(path.join(output, 'demo.yaml')).manifest;
+  assert.equal(generatedManifest.id, 'example-demo');
+  assert.equal(generatedManifest.app.allowInsecureTls, false);
   assert.throws(
     () => writeScaffold({
       script,

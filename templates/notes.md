@@ -8,6 +8,7 @@ validation.
 - App URL:
 - App lifecycle:
 - Authentication environment variables:
+- TLS policy and self-signed endpoint authorization:
 - Browser, viewport, theme, and zoom:
 - Isolated fixture or state:
 

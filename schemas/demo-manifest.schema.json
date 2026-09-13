@@ -50,6 +50,10 @@
           "format": "uri",
           "pattern": "^https?://"
         },
+        "allowInsecureTls": {
+          "type": "boolean",
+          "default": false
+        },
         "cwd": {
           "$ref": "#/$defs/path"
         },

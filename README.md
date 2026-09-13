@@ -121,6 +121,11 @@ are needed. The default state policy is read-only. If the script requests a
 write, the skill asks for explicit authorization and restoration requirements
 before proceeding.
 
+HTTPS certificate validation is strict by default. For a known self-signed
+demo endpoint, the skill can set `app.allowInsecureTls: true`; the bypass
+applies only to that demo's browser and URL checks and never changes global
+Node.js TLS settings.
+
 ## More detailed start
 
 The three values in Quick Start are usually enough. To override defaults, add
@@ -134,6 +139,7 @@ any of these optional details:
 >
 > - App folder/start command: `<path-to-app>` / `<command if needed>`
 > - Authentication: `<environment-variable names only; never literal secrets>`
+> - Self-signed TLS: `<allow only for this known demo endpoint>`
 > - Allowed mutations/restoration: `<what may change and how to restore it>`
 > - Narration: `<voice, segmented clips, reference track, or silent>`
 > - Browser: `<viewport and zoom>`

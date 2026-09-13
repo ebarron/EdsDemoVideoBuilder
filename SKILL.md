@@ -32,6 +32,8 @@ only for missing choices that materially affect safety or output:
 - app cwd/start command only when repository inspection cannot determine it;
 - authentication flow and environment-variable names only when login is
   required (never guess secret values);
+- self-signed TLS authorization only when an HTTPS demo probe reports a
+  certificate error—the default is strict certificate validation;
 - output paths when omitted;
 - optional narration/browser overrides—the default is macOS synthetic speech
   and standard video settings;
@@ -42,6 +44,11 @@ Do not put passwords, tokens, cookies, or credentials in a manifest, driver,
 chat output, or command line. Pass only environment-variable names in
 `auth.env`. Prefer an isolated fixture. Login and presentation setup happen in
 an unrecorded context.
+
+For a known self-signed demo endpoint, set `app.allowInsecureTls: true`. This
+scopes certificate bypass to that manifest's preflight/lifecycle URL checks and
+Playwright preparation/recording contexts. Never set
+`NODE_TLS_REJECT_UNAUTHORIZED=0` or disable certificate validation globally.
 
 ## Initialize once
 

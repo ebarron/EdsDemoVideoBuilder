@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { driverReadiness } from '../runtime/preflight.mjs';
+import { appUrlCheckOptions, driverReadiness } from '../runtime/preflight.mjs';
 
 test('preflight allows rehearsal for an incomplete driver', () => {
   assert.deepEqual(
@@ -23,4 +23,12 @@ test('preflight reports a production-ready driver separately', () => {
     productionReady: true,
     detail: 'production-ready',
   });
+});
+
+test('preflight scopes insecure TLS to the manifest option', () => {
+  assert.deepEqual(appUrlCheckOptions({ app: {} }), { allowInsecureTls: false });
+  assert.deepEqual(
+    appUrlCheckOptions({ app: { allowInsecureTls: true } }),
+    { allowInsecureTls: true },
+  );
 });

@@ -18,6 +18,12 @@ export function driverReadiness(status = {}) {
   };
 }
 
+export function appUrlCheckOptions(manifest) {
+  return {
+    allowInsecureTls: Boolean(manifest.app.allowInsecureTls),
+  };
+}
+
 export async function preflightDemo(manifest, environment = process.env) {
   const checks = [];
   let productionReady = false;
@@ -84,6 +90,7 @@ export async function preflightDemo(manifest, environment = process.env) {
   const app = await checkUrl(
     manifest.app.lifecycle.readyUrl ?? manifest.app.url,
     3000,
+    appUrlCheckOptions(manifest),
   );
   check('app URL', app.ok, app.ok ? `HTTP ${app.status}` : app.error ?? `HTTP ${app.status}`);
   return {

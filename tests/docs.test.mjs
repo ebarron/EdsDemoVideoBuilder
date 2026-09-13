@@ -14,6 +14,7 @@ const MARKDOWN = [
 ];
 const SKILL = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8');
 const DRIVER_API = fs.readFileSync(path.join(ROOT, 'references', 'driver-api.md'), 'utf8');
+const MANIFEST = fs.readFileSync(path.join(ROOT, 'references', 'manifest.md'), 'utf8');
 const SCRIPT_CONVENTION = fs.readFileSync(
   path.join(ROOT, 'references', 'script-convention.md'),
   'utf8',
@@ -50,6 +51,8 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Do not ask the user to label ordinary edits/,
     /narration-only.+do not edit\s+`driver\.mjs`/s,
     /semantic targets in one locator factory or page\s+object/,
+    /app\.allowInsecureTls: true/,
+    /Never set\s+`NODE_TLS_REJECT_UNAUTHORIZED=0`/,
     /duration as an optional\s+constraint, never as the quality goal/,
   ]) {
     assert.match(SKILL, pattern);
@@ -69,6 +72,14 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Set `evidence: true` on each critical `click`/,
   ]) {
     assert.match(DRIVER_API, pattern);
+  }
+  for (const pattern of [
+    /app\.allowInsecureTls` defaults to `false`/,
+    /ignoreHTTPSErrors: true` on both the unrecorded\s+authentication\/preparation context and the recorded browser context/,
+    /Preflight and lifecycle checks also accept the self-signed certificate/,
+    /Never use\s+`NODE_TLS_REJECT_UNAUTHORIZED=0`/,
+  ]) {
+    assert.match(MANIFEST, pattern);
   }
   for (const pattern of [
     /Users do not need to classify changes/,

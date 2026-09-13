@@ -6,7 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { browserLaunchOptions } from '../runtime/recorder.mjs';
+import { browserLaunchOptions, browserTlsOptions } from '../runtime/recorder.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const INSTALL = path.join(ROOT, 'scripts', 'install.sh');
@@ -118,6 +118,14 @@ fi
 test('default Chromium launch uses the browser installed by Playwright', () => {
   assert.deepEqual(browserLaunchOptions('chromium'), {});
   assert.deepEqual(browserLaunchOptions('chrome'), { channel: 'chrome' });
+});
+
+test('browser TLS bypass is scoped to the manifest option', () => {
+  assert.deepEqual(browserTlsOptions({ app: {} }), { ignoreHTTPSErrors: false });
+  assert.deepEqual(
+    browserTlsOptions({ app: { allowInsecureTls: true } }),
+    { ignoreHTTPSErrors: true },
+  );
 });
 
 test('repository ignores generated demos, captures, media, and auth state', () => {

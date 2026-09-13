@@ -7,6 +7,7 @@ driver: ./driver.mjs
 
 app:
   url: {{URL}}
+  allowInsecureTls: false
   cwd: {{APP_CWD}}
   lifecycle:
     mode: external
