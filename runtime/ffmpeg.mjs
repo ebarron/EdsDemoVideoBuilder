@@ -26,21 +26,49 @@ function probeDuration(ffmpeg, video) {
   return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
 }
 
+export function videoClockBoundaries(timeline) {
+  const videoStart = timeline.meta.videoStart ?? 0;
+  if (!Number.isFinite(videoStart) || videoStart < 0) {
+    throw new Error('Invalid raw-video clock origin');
+  }
+  const contentStart = timeline.meta.contentStart - videoStart;
+  const contentEnd = timeline.meta.contentEnd - videoStart;
+  if (!(contentStart >= 0 && contentEnd > contentStart)) {
+    throw new Error('Invalid raw-video content boundaries');
+  }
+  return { videoStart, contentStart, contentEnd };
+}
+
+export function assertRawVideoCoversTimeline(rawDuration, timeline, tolerance = 0.15) {
+  const { contentEnd } = videoClockBoundaries(timeline);
+  if (rawDuration + tolerance < contentEnd) {
+    throw new Error('Raw video ends before its explicit content boundary');
+  }
+}
+
 export function buildFilterGraph({ timeline, label = 'FAST FORWARD' }) {
-  const contentStart = timeline.meta.contentStart;
-  const contentEnd = timeline.meta.contentEnd;
-  if (!(contentEnd > contentStart)) throw new Error('Invalid explicit content boundaries');
+  const timelineContentStart = timeline.meta.contentStart;
+  const timelineContentEnd = timeline.meta.contentEnd;
+  if (!(timelineContentEnd > timelineContentStart)) {
+    throw new Error('Invalid explicit content boundaries');
+  }
   const compressions = validateCompressions(
     timeline.compressions ?? [],
-    contentStart,
-    contentEnd,
+    timelineContentStart,
+    timelineContentEnd,
   );
-  const finalDuration = mapTime(contentEnd, contentStart, compressions);
+  const { videoStart, contentStart, contentEnd } = videoClockBoundaries(timeline);
+  const videoCompressions = compressions.map((entry) => ({
+    ...entry,
+    start: entry.start - videoStart,
+    end: entry.end - videoStart,
+  }));
+  const finalDuration = mapTime(timelineContentEnd, timelineContentStart, compressions);
   const filters = [];
   const videoLabels = [];
   let cursor = contentStart;
 
-  for (const [index, entry] of compressions.entries()) {
+  for (const [index, entry] of videoCompressions.entries()) {
     if (entry.start > cursor) {
       filters.push(`[0:v]trim=start=${cursor}:end=${entry.start},setpts=PTS-STARTPTS[vn${index}]`);
       videoLabels.push(`[vn${index}]`);
@@ -82,9 +110,10 @@ export function buildFilterGraph({ timeline, label = 'FAST FORWARD' }) {
       if (entry.anchor?.wait) {
         const wait = timeline.waits.find((candidate) => candidate.id === entry.anchor.wait);
         if (!wait) throw new Error(`Missing wait anchor ${entry.anchor.wait}`);
-        outputStart = mapTime(wait.start, contentStart, compressions) + entry.anchor.offset;
+        outputStart =
+          mapTime(wait.start, timelineContentStart, compressions) + entry.anchor.offset;
       } else {
-        outputStart = mapTime(entry.start, contentStart, compressions);
+        outputStart = mapTime(entry.start, timelineContentStart, compressions);
       }
       const delay = Math.max(0, Math.round(outputStart * 1000));
       const audioLabel = `voice${input}`;
@@ -126,9 +155,7 @@ export function finishRecording(manifest, { force = false, environment = process
   const timeline = JSON.parse(fs.readFileSync(timelinePath, 'utf8'));
   const video = fs.readFileSync(videoPathFile, 'utf8').trim();
   const rawDuration = probeDuration(ffmpeg, video);
-  if (rawDuration + 0.15 < timeline.meta.contentEnd) {
-    throw new Error(`Raw video ends before its explicit content boundary`);
-  }
+  assertRawVideoCoversTimeline(rawDuration, timeline);
 
   const plan = buildFilterGraph({
     timeline,

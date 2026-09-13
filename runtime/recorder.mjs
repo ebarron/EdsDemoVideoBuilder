@@ -86,6 +86,75 @@ function readStorageState(manifest, environment) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+export async function prepareBrowserStorageState({
+  browser,
+  driver,
+  environment,
+  manifest,
+  rehearsal,
+  secrets,
+}) {
+  const prepContext = await browser.newContext({
+    viewport: manifest.browser.viewport,
+    storageState: readStorageState(manifest, environment),
+    colorScheme: manifest.browser.colorScheme,
+    ...browserTlsOptions(manifest),
+  });
+  try {
+    const prepPage = await prepContext.newPage();
+    const prepBase = { page: prepPage, context: prepContext, manifest, secrets, rehearsal };
+    if (manifest.auth.mode === 'driver') {
+      if (typeof driver.authenticate !== 'function') {
+        throw new Error('auth.mode driver requires driver.authenticate()');
+      }
+      await driver.authenticate(prepBase);
+    } else if (manifest.auth.mode === 'none') {
+      await prepPage.goto(manifest.app.url);
+    }
+    if (typeof driver.prepare === 'function') await driver.prepare(prepBase);
+    return await prepContext.storageState();
+  } finally {
+    await prepContext.close();
+  }
+}
+
+export async function createRecordedPage({
+  browser,
+  manifest,
+  rehearsal,
+  storageState,
+  timeline,
+  workDir,
+}) {
+  const contextOptions = {
+    viewport: manifest.browser.viewport,
+    storageState,
+    colorScheme: manifest.browser.colorScheme,
+    ...browserTlsOptions(manifest),
+  };
+  if (!rehearsal) {
+    contextOptions.recordVideo = {
+      dir: path.join(workDir, 'video'),
+      size: manifest.browser.viewport,
+    };
+  }
+  const context = await browser.newContext(contextOptions);
+  try {
+    await context.addInitScript(installDemoPointer);
+    await context.addInitScript(installDemoZoom, manifest.browser.zoom);
+    const page = await context.newPage();
+    timeline.meta.videoStart = timeline.elapsed();
+    return {
+      context,
+      page,
+      videoObject: rehearsal ? null : page.video(),
+    };
+  } catch (error) {
+    await context.close().catch(() => {});
+    throw error;
+  }
+}
+
 function createDriverContext(base, timeline, helpers, narration) {
   const pace = narration.pace;
   const pause = (milliseconds) => base.page.waitForTimeout(Math.max(0, milliseconds * pace));
@@ -186,43 +255,25 @@ export async function runDemo(manifest, {
 
   try {
     browser = await chromium.launch(browserLaunchOptions(manifest.browser.channel));
-    const prepContext = await browser.newContext({
-      viewport: manifest.browser.viewport,
-      storageState: readStorageState(manifest, environment),
-      colorScheme: manifest.browser.colorScheme,
-      ...browserTlsOptions(manifest),
+    const storageState = await prepareBrowserStorageState({
+      browser,
+      driver,
+      environment,
+      manifest,
+      rehearsal,
+      secrets,
     });
-    const prepPage = await prepContext.newPage();
-    const prepBase = { page: prepPage, context: prepContext, manifest, secrets, rehearsal };
-    if (manifest.auth.mode === 'driver') {
-      if (typeof driver.authenticate !== 'function') {
-        throw new Error('auth.mode driver requires driver.authenticate()');
-      }
-      await driver.authenticate(prepBase);
-    } else if (manifest.auth.mode === 'none') {
-      await prepPage.goto(manifest.app.url);
-    }
-    if (typeof driver.prepare === 'function') await driver.prepare(prepBase);
-    const storageState = await prepContext.storageState();
-    await prepContext.close();
-
-    const contextOptions = {
-      viewport: manifest.browser.viewport,
+    const recorded = await createRecordedPage({
+      browser,
+      manifest,
+      rehearsal,
       storageState,
-      colorScheme: manifest.browser.colorScheme,
-      ...browserTlsOptions(manifest),
-    };
-    if (!rehearsal) {
-      contextOptions.recordVideo = {
-        dir: path.join(workDir, 'video'),
-        size: manifest.browser.viewport,
-      };
-    }
-    context = await browser.newContext(contextOptions);
-    await context.addInitScript(installDemoPointer);
-    await context.addInitScript(installDemoZoom, manifest.browser.zoom);
-    page = await context.newPage();
-    videoObject = rehearsal ? null : page.video();
+      timeline,
+      workDir,
+    });
+    context = recorded.context;
+    page = recorded.page;
+    videoObject = recorded.videoObject;
     const base = { page, context, manifest, secrets, rehearsal, workDir, scenePlan };
     let driverContext;
     const pause = (milliseconds) =>

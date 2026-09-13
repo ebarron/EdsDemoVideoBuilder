@@ -14,6 +14,10 @@ const MARKDOWN = [
 ];
 const SKILL = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8');
 const DRIVER_API = fs.readFileSync(path.join(ROOT, 'references', 'driver-api.md'), 'utf8');
+const FFMPEG = fs.readFileSync(
+  path.join(ROOT, 'references', 'ffmpeg-and-validation.md'),
+  'utf8',
+);
 const MANIFEST = fs.readFileSync(path.join(ROOT, 'references', 'manifest.md'), 'utf8');
 const SCRIPT_CONVENTION = fs.readFileSync(
   path.join(ROOT, 'references', 'script-convention.md'),
@@ -53,6 +57,8 @@ test('skill documents watchable and resilient driver defaults', () => {
     /semantic targets in one locator factory or page\s+object/,
     /app\.allowInsecureTls: true/,
     /Never set\s+`NODE_TLS_REJECT_UNAUTHORIZED=0`/,
+    /Preserve\s+`timeline.meta.videoStart` as that media-clock origin/,
+    /legacy captures use\s+`videoStart \?\? 0`/,
     /duration as an optional\s+constraint, never as the quality goal/,
   ]) {
     assert.match(SKILL, pattern);
@@ -72,6 +78,13 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Set `evidence: true` on each critical `click`/,
   ]) {
     assert.match(DRIVER_API, pattern);
+  }
+  for (const pattern of [
+    /Playwright video begins when the recorded page is created/,
+    /FFmpeg trim and\s+compression boundaries subtract this offset/,
+    /Legacy timelines use\s+`videoStart \?\? 0`/,
+  ]) {
+    assert.match(FFMPEG, pattern);
   }
   for (const pattern of [
     /app\.allowInsecureTls` defaults to `false`/,

@@ -226,6 +226,13 @@ viewport top before any hold or pan. Optimize for readable narration,
 watchable motion, and comprehension. Treat a requested duration as an optional
 constraint, never as the quality goal.
 
+The orchestration timeline begins before unrecorded preparation, while raw
+Playwright video begins with the recorded page. Preserve
+`timeline.meta.videoStart` as that media-clock origin and normalize only raw
+video trim, compression, and duration boundaries. Keep narration and canonical
+timeline events on the orchestration clock; legacy captures use
+`videoStart ?? 0`.
+
 The finisher uses explicit content bounds, CFR 25 fps H.264/AAC, 48 kHz audio,
 and faststart. Audio uses finite `apad=whole_dur` followed by `atrim`, and the
 output gets an explicit `-t`. Never combine indefinite `apad`/`amix` output

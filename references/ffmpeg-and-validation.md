@@ -4,6 +4,13 @@ The finisher maps raw timestamps through successful wait compressions, trims
 normal-speed and accelerated segments, adds a visible fast-forward badge, and
 concatenates them. The initiating click is not in the compressed interval.
 
+The orchestration timeline begins before lifecycle/authentication/preparation,
+but Playwright video begins when the recorded page is created. The recorder
+stores that media-clock origin as `timeline.meta.videoStart`. FFmpeg trim and
+compression boundaries subtract this offset; narration and canonical timeline
+events remain on the orchestration clock. Legacy timelines use
+`videoStart ?? 0`.
+
 The graph is explicitly bounded:
 
 - raw video is trimmed to `contentStart..contentEnd`;
