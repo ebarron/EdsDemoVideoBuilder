@@ -7,7 +7,7 @@ export default {
       'Prove each recorded locator is visible, unique, and scoped to a stable region.',
       'Keep semantic product targets in one locator factory separate from choreography.',
       'Mark critical clicks for pointer-overlap and click-time evidence review.',
-      'Align each action to its narration cue and implement two-phase async boundaries.',
+      'Read ordered scene.cues, align each action to its narration, and implement two-phase async boundaries.',
       'Use slow smooth scrolling for every recorded reveal and viewport change.',
       'Implement a meaningful state snapshot and independent restoration assertion.',
     ],

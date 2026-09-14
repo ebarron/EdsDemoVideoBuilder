@@ -13,8 +13,11 @@ per-demo `demo.yaml`, normalized `scene-plan.json`, and `driver.mjs`.
 The user normally edits only the Markdown script and, optionally, supplies
 voice clips. The agent owns generated configuration and browser choreography:
 
-- Markdown is the human source of narration and intent.
-- `scene-plan.json` is generated normalized output; update it with `sync`.
+- Markdown is the human source of narration and intent. Keep narration and its
+  visual directions interleaved in viewer order.
+- `scene-plan.json` is generated normalized output; ordered `scene.cues`
+  preserve that authoring sequence while compatibility projections retain
+  `scene.narration` and `scene.actions`. Update it with `sync`.
 - `demo.yaml` is agent-managed recording/runtime configuration unless the user
   asks for advanced control.
 - `driver.mjs` is agent-generated and agent-maintained executable app
@@ -68,11 +71,14 @@ node scripts/demo.mjs init \
 normalizing a script and [references/manifest.md](references/manifest.md) when
 editing configuration.
 
-Treat ordinary paragraphs and blockquotes as narration. Treat italic or
-bracketed directions as actions. Machine-readable
-`<!-- demo:scene {...} -->` and `<!-- demo:action {...} -->` comments override
-ambiguity. Legacy parsing is intentionally reviewable, not magical: inspect the
-normalized plan and remove presenter notes, appendices, or non-spoken material.
+Treat ordinary paragraphs and blockquotes as narration. Treat standalone
+italic/bracketed directions and inline English action directions such as
+`[Click Analytics.]` as actions. Keep each action beside the words it supports;
+never extract all actions into a separate section or file. Do not insert JSON
+or machine metadata into the user's narration file. Existing `demo:scene` and
+`demo:action` comments remain readable only for backward compatibility. Legacy
+parsing is intentionally reviewable, not magical: inspect the normalized plan
+and remove presenter notes, appendices, or non-spoken material.
 
 The natural-language requests “initialize,” “rehearse and repair,” “record,”
 and “finish/validate” are independent entry points, not mandatory commands the
@@ -91,12 +97,27 @@ node scripts/demo.mjs sync --manifest path/to/demo.yaml
 node scripts/demo.mjs sync --manifest path/to/demo.yaml --write
 ```
 
-Preview reports added, removed, and changed scenes/actions. `--write` creates a
-unique backup and atomically replaces the plan. `--check` is available for
-drift checks. Stable IDs and existing custom hints are retained when title,
-explicit ID, action text, or action ID gives a deterministic match. Default
-parser exclusions remove appendices, Building the video/internal notes, and
-caption sections from narration.
+Preview reports added, removed, and changed scenes/actions/cue alignment.
+`--write` creates a unique backup and atomically replaces the plan. `--check`
+is available for drift checks. Stable IDs and existing custom hints are
+retained when title, explicit ID, action text, or action ID gives a
+deterministic match. Default parser exclusions remove appendices, Building the
+video/internal notes, and caption sections from narration.
+
+Existing v1 plans without `scene.cues` remain readable. If their standalone
+directions were already recognized as actions, the first sync reports a
+`representation-only` migration with no driver review, and `--write` adds
+ordered cues without removing or changing the compatibility `narration` and
+`actions` fields. An inline English `[Click ...]` direction that the old parser
+treated as spoken text is now removed from narration and added as an action;
+that semantic migration requires driver review. If the Markdown itself still
+interleaves directions, do not rewrite it. If a prior workflow physically
+separated all directions from narration, do not guess their intended
+placement: restore each direction beside the relevant spoken words, preview
+the alignment changes, then update affected narration checkpoints before
+rerecording. Follow
+[references/ordered-cues-migration.md](references/ordered-cues-migration.md)
+for current-demo upgrade cases.
 
 Before editing generated artifacts, classify the change internally. The sync
 preview labels deterministic script changes; supplement it with live evidence:
@@ -105,6 +126,8 @@ preview labels deterministic script changes; supplement it with live evidence:
   `driver.mjs`;
 - **timing-only** changes update cue checkpoints or timing values, not
   locators;
+- **alignment** changes move an action across a narration boundary and require
+  review of that action's narration checkpoint;
 - **choreography** changes add, remove, reorder, or alter browser actions;
 - **locator/layout** changes repair semantic targets after observed UI drift;
 - **functional** changes update event boundaries, state handling, or
@@ -117,8 +140,9 @@ narration-only request coincides with unrelated app drift, describe that drift
 separately rather than attributing driver churn to the copy edit.
 
 If a legacy hand-curated plan previews broad structural churn because its
-scene splits are absent from Markdown, do not write. Add explicit stable scene
-comments or reconcile the segmentation first.
+scene splits are absent from Markdown, do not write. Reconcile the segmentation
+with clear English Markdown headings first; do not solve it by adding JSON to
+the narration file.
 
 After sync, compare action changes with `driver.mjs`, inspect the running app,
 repair affected selectors/actions/boundaries, and internally rehearse again as

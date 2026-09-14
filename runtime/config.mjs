@@ -107,6 +107,27 @@ export function readScenePlan(manifest) {
   for (const scene of plan.scenes) {
     if (!scene.id || ids.has(scene.id)) throw new Error(`Duplicate or missing scene id: ${scene.id}`);
     ids.add(scene.id);
+    if (scene.cues !== undefined) {
+      if (!Array.isArray(scene.cues)) {
+        throw new Error(`Invalid ordered cues for scene ${scene.id}`);
+      }
+      const cueIds = new Set();
+      for (const cue of scene.cues) {
+        if (!cue.id || cueIds.has(cue.id)) {
+          throw new Error(`Duplicate or missing cue id in scene ${scene.id}: ${cue.id}`);
+        }
+        cueIds.add(cue.id);
+        if (cue.kind === 'narration' && typeof cue.text !== 'string') {
+          throw new Error(`Narration cue ${cue.id} in scene ${scene.id} requires text`);
+        }
+        if (cue.kind === 'action' && typeof cue.actionId !== 'string') {
+          throw new Error(`Action cue ${cue.id} in scene ${scene.id} requires an actionId`);
+        }
+        if (!['narration', 'action'].includes(cue.kind)) {
+          throw new Error(`Unsupported cue kind in scene ${scene.id}: ${cue.kind}`);
+        }
+      }
+    }
   }
   return plan;
 }

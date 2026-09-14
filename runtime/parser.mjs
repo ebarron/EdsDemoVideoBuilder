@@ -4,6 +4,7 @@ const MACHINE_COMMENT = /^\s*<!--\s*demo:(scene|action)\s+(\{.*\})\s*-->\s*$/;
 const HEADING = /^(#{1,6})\s+(.+?)\s*$/;
 const STAGE_DIRECTION = /^\s*(?:\*|_)?\[(.+)](?:\*|_)?\s*$/;
 const ITALIC_STAGE_DIRECTION = /^\s*(?:\*|_)(On screen:|Navigate|Open|Close|Click|Select|Point|Move|Enter|Type|Wait|Return|Scroll|While|When|Enable|Disable|Use\b)([\s\S]*)(?:\*|_)\s*$/i;
+const INLINE_STAGE_DIRECTION = /(\*\[[^\]\n]+]\*|_\[[^\]\n]+]_|(?:\[(?:On screen:|Navigate\b|Open\b|Close\b|Click\b|Select\b|Point\b|Move\b|Enter\b|Type\b|Wait\b|Return\b|Scroll\b|While\b|When\b|Enable\b|Disable\b|Use\b)[^\]\n]*])(?!\())/gi;
 const DEFAULT_EXCLUDED_HEADING = /^(?:appendix\b|building the video notes?\b|internal\b|captions?\b|narration timing budget\b)/i;
 const PREFERRED_SCRIPT_ROOT = /^(?:voiceover narrative|spoken (?:script|narrative)|demo narration)\b/i;
 
@@ -54,7 +55,6 @@ export function parseDemoScript(markdown, options = {}) {
   const usedIds = new Set();
   let current = null;
   let paragraph = [];
-  let paragraphStart = 1;
   let inFence = false;
   let selected = !includeHeadings;
   let excludedLevel = null;
@@ -69,17 +69,78 @@ export function parseDemoScript(markdown, options = {}) {
     return candidate;
   };
 
-  const ensureScene = (title = path.basename(source)) => {
-    if (current) return current;
-    current = {
-      id: uniqueId(title),
+  const createScene = ({
+    id,
+    title,
+    timing,
+    startLine,
+    narration,
+  }) => {
+    const scene = {
+      id: uniqueId(id ?? title),
       title,
+      cues: [],
       narration: '',
       actions: [],
-      source: { startLine: paragraphStart, endLine: paragraphStart },
+      source: { startLine, endLine: startLine },
     };
-    scenes.push(current);
+    if (timing !== undefined) scene.timing = timing;
+    scenes.push(scene);
+    if (narration) {
+      scene.cues.push({
+        id: `${scene.id}-narration-1`,
+        kind: 'narration',
+        text: narration,
+        source: { startLine, endLine: startLine },
+      });
+      scene.narration = narration;
+    }
+    return scene;
+  };
+
+  const ensureScene = (
+    title = path.basename(source),
+    startLine = paragraph[0]?.lineNumber ?? 1,
+  ) => {
+    if (current) return current;
+    current = createScene({
+      id: title,
+      title,
+      startLine,
+    });
     return current;
+  };
+
+  const addNarrationCue = (scene, text, startLine, endLine, separator = '\n\n') => {
+    const narration = text.trim();
+    if (!narration) return;
+    const number = scene.cues.filter((cue) => cue.kind === 'narration').length + 1;
+    scene.cues.push({
+      id: `${scene.id}-narration-${number}`,
+      kind: 'narration',
+      text: narration,
+      source: { startLine, endLine },
+    });
+    scene.narration = scene.narration
+      ? `${scene.narration}${separator}${narration}`
+      : narration;
+    scene.source.endLine = endLine;
+  };
+
+  const addActionCue = (scene, value, lineNumber) => {
+    const action = {
+      id: value.id ?? `${scene.id}-action-${scene.actions.length + 1}`,
+      ...value,
+      sourceLine: lineNumber,
+    };
+    scene.actions.push(action);
+    scene.cues.push({
+      id: action.id,
+      kind: 'action',
+      actionId: action.id,
+      source: { startLine: lineNumber, endLine: lineNumber },
+    });
+    scene.source.endLine = lineNumber;
   };
 
   const flushParagraph = (endLine) => {
@@ -87,12 +148,46 @@ export function parseDemoScript(markdown, options = {}) {
       paragraph = [];
       return;
     }
-    const text = paragraph.map(stripNarrationPrefix).filter(Boolean).join(' ');
-    if (text) {
-      const scene = ensureScene();
-      scene.narration = [scene.narration, text].filter(Boolean).join('\n\n');
-      scene.source.endLine = endLine;
+    const scene = ensureScene(undefined, paragraph[0].lineNumber);
+    let narrationParts = [];
+    let narrationStart = null;
+    let narrationEnd = null;
+    let narrationCuesInParagraph = 0;
+    const appendNarration = (text, lineNumber) => {
+      const normalized = text.trim();
+      if (!normalized) return;
+      narrationParts.push(normalized);
+      narrationStart ??= lineNumber;
+      narrationEnd = lineNumber;
+    };
+    const flushNarration = () => {
+      if (narrationParts.length) {
+        addNarrationCue(
+          scene,
+          narrationParts.join(' '),
+          narrationStart,
+          narrationEnd,
+          narrationCuesInParagraph === 0 ? '\n\n' : ' ',
+        );
+        narrationCuesInParagraph += 1;
+      }
+      narrationParts = [];
+      narrationStart = null;
+      narrationEnd = null;
+    };
+    for (const entry of paragraph) {
+      const text = stripNarrationPrefix(entry.text);
+      let cursor = 0;
+      for (const match of text.matchAll(INLINE_STAGE_DIRECTION)) {
+        appendNarration(text.slice(cursor, match.index), entry.lineNumber);
+        flushNarration();
+        addActionCue(scene, { direction: stripDirection(match[0]) }, entry.lineNumber);
+        cursor = match.index + match[0].length;
+      }
+      appendNarration(text.slice(cursor), entry.lineNumber);
     }
+    flushNarration();
+    scene.source.endLine = Math.max(scene.source.endLine, endLine);
     paragraph = [];
   };
 
@@ -112,24 +207,16 @@ export function parseDemoScript(markdown, options = {}) {
       if (machine.kind === 'scene') {
         const value = machine.value;
         if (!value.id) throw new Error(`demo:scene at line ${lineNumber} requires an id`);
-        current = {
-          id: uniqueId(value.id),
+        current = createScene({
+          id: value.id,
           title: value.title ?? value.id,
-          narration: value.narration ?? '',
-          actions: [],
+          narration: value.narration,
           timing: value.timing,
-          source: { startLine: lineNumber, endLine: lineNumber },
-        };
-        scenes.push(current);
+          startLine: lineNumber,
+        });
       } else {
         const scene = ensureScene();
-        const value = machine.value;
-        scene.actions.push({
-          id: value.id ?? `${scene.id}-action-${scene.actions.length + 1}`,
-          ...value,
-          sourceLine: lineNumber,
-        });
-        scene.source.endLine = lineNumber;
+        addActionCue(scene, machine.value, lineNumber);
       }
       continue;
     }
@@ -170,14 +257,11 @@ export function parseDemoScript(markdown, options = {}) {
       }
       selected = !includeHeadings || includeHeadings.includes(title.toLowerCase());
       if (selected) {
-        current = {
-          id: uniqueId(title),
+        current = createScene({
+          id: title,
           title,
-          narration: '',
-          actions: [],
-          source: { startLine: lineNumber, endLine: lineNumber },
-        };
-        scenes.push(current);
+          startLine: lineNumber,
+        });
       } else {
         current = null;
       }
@@ -188,12 +272,7 @@ export function parseDemoScript(markdown, options = {}) {
     if (STAGE_DIRECTION.test(line) || ITALIC_STAGE_DIRECTION.test(line)) {
       flushParagraph(lineNumber - 1);
       const scene = ensureScene();
-      scene.actions.push({
-        id: `${scene.id}-action-${scene.actions.length + 1}`,
-        direction: stripDirection(line),
-        sourceLine: lineNumber,
-      });
-      scene.source.endLine = lineNumber;
+      addActionCue(scene, { direction: stripDirection(line) }, lineNumber);
       continue;
     }
 
@@ -201,14 +280,13 @@ export function parseDemoScript(markdown, options = {}) {
       flushParagraph(lineNumber - 1);
       continue;
     }
-    if (!paragraph.length) paragraphStart = lineNumber;
-    paragraph.push(line);
+    paragraph.push({ text: line, lineNumber });
   }
   flushParagraph(lines.length);
 
   return {
     version: 1,
     source,
-    scenes: scenes.filter((scene) => scene.narration || scene.actions.length),
+    scenes: scenes.filter((scene) => scene.cues.length),
   };
 }

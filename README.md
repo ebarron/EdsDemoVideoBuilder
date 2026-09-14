@@ -23,15 +23,13 @@ Start a new Cursor chat or reload Cursor after installation so
 
 ### 1. Write or edit the Markdown script
 
-Normal paragraphs are spoken. Put browser directions in standalone italic
-brackets:
+Normal paragraphs are spoken. Keep browser directions beside the words they
+belong to as plain English inside square brackets, either standalone or inline:
 
 ```markdown
 # Analytics overview
 
-This dashboard shows request volume and service health at a glance.
-
-*[Open Analytics from the main navigation.]*
+This dashboard shows request volume and service health at a glance. [Open Analytics from the main navigation.]
 
 The traffic chart makes the morning peak easy to see.
 
@@ -175,11 +173,39 @@ changed stage directions may require Cursor to inspect the UI, repair the
 affected actions, and rehearse again. You may state “this is narration-only”
 when that intent is useful, but the skill still verifies the diff.
 
-For frequently revised demos, explicit stable scene/action IDs keep identity
-across copy changes. Keep spoken copy and stage directions separate. If a late
-scene invokes an expensive API or LLM, optionally provide isolated seeded state
-and its reset procedure so Cursor can probe that scene before the final
-end-to-end rehearsal.
+For frequently revised demos, recognizable headings and action wording help
+generated IDs retain identity across copy changes. Keep spoken copy and English
+square-bracket directions interleaved in the order the viewer should
+experience them. Do not collect actions in a separate section or add JSON to
+the narration file. If a late scene invokes an expensive API or LLM,
+optionally provide isolated seeded state and its reset procedure so Cursor can
+probe that scene before the final end-to-end rehearsal.
+
+### Update an existing demo to ordered cues
+
+After updating the skill, preview `sync` for each existing demo. An older plan
+whose directions were already recognized as standalone actions reports
+`representation-only`, adds ordered `scene.cues`, and sets
+`driverReviewRequired` to `false`. Apply it with `sync --write`; the existing
+`scene.narration`, `scene.actions`, driver API, and narration clip names remain
+compatible.
+
+Older plans may have spoken an inline `[Click ...]` direction because the old
+parser did not recognize it inside a prose line. Sync now removes that English
+direction from spoken narration and creates the action in its correct cue
+position. Preview reports the semantic change and requires driver review
+before writing and rerecording.
+
+If the authoritative Markdown already interleaves narration and directions,
+no source edit is needed. If someone physically moved all directions into a
+separate section, the old plan does not contain enough information to infer
+their intended spoken context. Move each direction back beside the relevant
+words, preview the reported alignment changes, and let Cursor update the
+affected narration checkpoints before rerecording. `sync --write` backs up the
+previous plan and never rewrites the Markdown.
+
+See [Ordered-cue migration](references/ordered-cues-migration.md) for the
+upgrade checklist and expected sync classifications.
 
 ## Using your own voice
 
@@ -217,8 +243,10 @@ These are implementation artifacts. They are normally hands off:
 
 - `demo.yaml`: runtime configuration managed by Cursor. Advanced users may
   inspect or edit it when they need exact lifecycle, timing, or output control.
-- `scene-plan.json`: generated spoken/action plan. Cursor updates it from the
-  Markdown; do not normally hand-edit it.
+- `scene-plan.json`: generated spoken/action plan. Ordered `scene.cues` retain
+  the Markdown sequence while compatibility fields keep narration and actions
+  available to existing drivers. Cursor updates it from the Markdown; do not
+  normally hand-edit it.
 - `driver.mjs`: app-specific browser choreography generated and maintained by
   Cursor. Rehearsal validates it; the CLI does not magically repair selectors.
 - `building-the-video.md`: operational notes updated by Cursor as it learns
@@ -236,6 +264,7 @@ recording remains gated on a successful rehearsal and restoration proof.
 Detailed references:
 
 - [Production workflow](references/production-workflow.md)
+- [Ordered-cue migration](references/ordered-cues-migration.md)
 - [Manifest reference](references/manifest.md)
 - [Driver API](references/driver-api.md)
 - [FFmpeg and validation](references/ffmpeg-and-validation.md)

@@ -15,6 +15,7 @@ validation.
 ## Latest change classification
 
 - Sync classification:
+- Ordered cue/alignment changes:
 - Additional locator/layout or functional evidence:
 - Driver impact and reason:
 

@@ -47,12 +47,119 @@ test('sync preserves scene IDs for wording-only changes', () => {
   assert.equal(result.written, false);
   assert.equal(result.plan.scenes[0].id, 'intro');
   assert.equal(result.plan.scenes[0].actions[0].id, 'show-dashboard');
+  assert.equal(result.plan.scenes[0].cues.at(-1).actionId, 'show-dashboard');
   assert.deepEqual(result.diff.scenes.changed, [{ id: 'intro', fields: ['narration'] }]);
   assert.deepEqual(result.diff.actions.changed, []);
   assert.deepEqual(result.diff.classification, {
     label: 'narration-only',
     kinds: ['narration'],
     driverReviewRequired: false,
+  });
+});
+
+test('sync migrates legacy plans to ordered cues without requiring driver review', () => {
+  const files = fixture('# Opening\n\nOriginal words.\n\n*[Open dashboard.]*\n');
+  const markdown = fs.readFileSync(files.script, 'utf8');
+  const legacy = JSON.parse(fs.readFileSync(files.plan, 'utf8'));
+  for (const scene of legacy.scenes) delete scene.cues;
+  const compatibility = legacy.scenes.map(({ narration, actions }) => ({ narration, actions }));
+  fs.writeFileSync(files.plan, `${JSON.stringify(legacy, null, 2)}\n`);
+
+  const preview = syncScenePlan({ manifestPath: files.manifest });
+  assert.equal(preview.diff.sourceChanged, false);
+  assert.equal(preview.diff.changed, true);
+  assert.deepEqual(preview.diff.scenes.changed, []);
+  assert.deepEqual(preview.diff.cues, {
+    migrated: ['opening'],
+    alignmentChanged: [],
+  });
+  assert.deepEqual(preview.diff.classification, {
+    label: 'representation-only',
+    kinds: ['representation'],
+    driverReviewRequired: false,
+  });
+
+  const written = syncScenePlan({ manifestPath: files.manifest, write: true });
+  assert.equal(written.written, true);
+  const migrated = JSON.parse(fs.readFileSync(files.plan, 'utf8'));
+  assert.deepEqual(
+    migrated.scenes[0].cues.map((cue) => cue.kind),
+    ['narration', 'action'],
+  );
+  assert.deepEqual(
+    migrated.scenes.map(({ narration, actions }) => ({ narration, actions })),
+    compatibility,
+  );
+  assert.equal(fs.readFileSync(files.script, 'utf8'), markdown);
+  assert.equal(syncScenePlan({ manifestPath: files.manifest }).diff.changed, false);
+});
+
+test('sync flags inline directions previously embedded in spoken narration', () => {
+  const files = fixture(
+    '# Opening\n\nIntroduce the dashboard. [Click Analytics.] Explain the chart.\n',
+  );
+  const legacy = JSON.parse(fs.readFileSync(files.plan, 'utf8'));
+  delete legacy.scenes[0].cues;
+  legacy.scenes[0].narration =
+    'Introduce the dashboard. [Click Analytics.] Explain the chart.';
+  legacy.scenes[0].actions = [];
+  fs.writeFileSync(files.plan, `${JSON.stringify(legacy, null, 2)}\n`);
+
+  const result = syncScenePlan({ manifestPath: files.manifest });
+  assert.equal(
+    result.plan.scenes[0].narration,
+    'Introduce the dashboard. Explain the chart.',
+  );
+  assert.deepEqual(
+    result.plan.scenes[0].actions.map(({ direction }) => direction),
+    ['Click Analytics.'],
+  );
+  assert.deepEqual(result.diff.scenes.changed, [
+    { id: 'opening', fields: ['narration', 'actions'] },
+  ]);
+  assert.deepEqual(result.diff.classification, {
+    label: 'narration+choreography+representation',
+    kinds: ['narration', 'choreography', 'representation'],
+    driverReviewRequired: true,
+  });
+});
+
+test('sync identifies action movement across narration as alignment work', () => {
+  const files = fixture(
+    '# Proof\n\nIntroduce the proof.\n\n*[Open evidence.]*\n\nExplain the result.\n',
+  );
+  fs.writeFileSync(
+    files.script,
+    '# Proof\n\nIntroduce the proof.\n\nExplain the result.\n\n*[Open evidence.]*\n',
+  );
+
+  const result = syncScenePlan({ manifestPath: files.manifest });
+  assert.deepEqual(result.diff.scenes.changed, [{ id: 'proof', fields: ['alignment'] }]);
+  assert.deepEqual(result.diff.actions.changed, []);
+  assert.deepEqual(result.diff.cues.alignmentChanged, ['proof']);
+  assert.deepEqual(result.diff.classification, {
+    label: 'alignment-only',
+    kinds: ['alignment'],
+    driverReviewRequired: true,
+  });
+});
+
+test('sync identifies reordered action cues as choreography', () => {
+  const files = fixture(
+    '# Proof\n\nIntroduce the proof.\n\n*[Open evidence.]*\n\n*[Point to Passed.]*\n',
+  );
+  fs.writeFileSync(
+    files.script,
+    '# Proof\n\nIntroduce the proof.\n\n*[Point to Passed.]*\n\n*[Open evidence.]*\n',
+  );
+
+  const result = syncScenePlan({ manifestPath: files.manifest });
+  assert.deepEqual(result.diff.actions.reordered, ['proof']);
+  assert.deepEqual(result.diff.scenes.changed, [{ id: 'proof', fields: ['actions'] }]);
+  assert.deepEqual(result.diff.classification, {
+    label: 'choreography-only',
+    kinds: ['choreography'],
+    driverReviewRequired: true,
   });
 });
 

@@ -1,16 +1,13 @@
 # Demo title
 
-<!-- demo:scene {"id":"opening","title":"Opening"} -->
+## Opening
 
 This paragraph is narration. Write spoken words as ordinary Markdown or a
-blockquote.
+blockquote. [Point to the primary status, then open its details.] The details
+explain why the status matters.
 
-*[Point to the primary status, then open its details.]*
-
-<!-- demo:action {"id":"open-details","type":"click","target":"Primary status","success":"Details heading is visible"} -->
-
-<!-- demo:scene {"id":"close","title":"Close"} -->
+## Close
 
 End with the outcome the audience should remember.
 
-*[Return to the starting view and hold.]*
+[Return to the starting view and hold.]

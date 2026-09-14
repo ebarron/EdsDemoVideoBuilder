@@ -19,6 +19,10 @@ const FFMPEG = fs.readFileSync(
   'utf8',
 );
 const MANIFEST = fs.readFileSync(path.join(ROOT, 'references', 'manifest.md'), 'utf8');
+const MIGRATION = fs.readFileSync(
+  path.join(ROOT, 'references', 'ordered-cues-migration.md'),
+  'utf8',
+);
 const SCRIPT_CONVENTION = fs.readFileSync(
   path.join(ROOT, 'references', 'script-convention.md'),
   'utf8',
@@ -54,6 +58,10 @@ test('skill documents watchable and resilient driver defaults', () => {
     /never overlap scroll, pointer travel, typing, or\s+layout motion/,
     /Do not ask the user to label ordinary edits/,
     /narration-only.+do not edit\s+`driver\.mjs`/s,
+    /Keep narration and its\s+visual directions interleaved in viewer order/,
+    /Do not insert JSON\s+or machine metadata into the user's narration file/,
+    /`representation-only` migration with no driver review/,
+    /alignment.+require\s+review of that action's narration checkpoint/s,
     /semantic targets in one locator factory or page\s+object/,
     /app\.allowInsecureTls: true/,
     /Never set\s+`NODE_TLS_REJECT_UNAUTHORIZED=0`/,
@@ -68,6 +76,7 @@ test('skill documents watchable and resilient driver defaults', () => {
     /about 900 ms of visible pointer travel/,
     /types sequentially/,
     /sentence should own\s+the action/,
+    /Read each scene's ordered `cues` in source order/,
     /busy state appears, then it\s+clears/,
     /Recorded pointer, typing, and scene helpers are\s+intentionally unavailable/,
     /default duration is 1\.6 seconds/,
@@ -96,10 +105,25 @@ test('skill documents watchable and resilient driver defaults', () => {
   }
   for (const pattern of [
     /Users do not need to classify changes/,
-    /Moving an unchanged stage direction.+not\s+a choreography change/s,
+    /Moving an unchanged stage direction.+without\s+crossing a narration\/action boundary.+not a choreography change/s,
+    /English square-bracket direction may also appear inline/,
+    /New authoring uses English headings,\s+spoken prose, and English square-bracket\s+directions/,
+    /reports `representation-only` and\s+`driverReviewRequired: false`/,
+    /does not change `scene\.narration`,\s+`scene\.actions`, driver hooks, or scene-based\s+narration clip names/,
     /isolated seed\/setup and reset procedure/,
   ]) {
     assert.match(SCRIPT_CONVENTION, pattern);
+  }
+  for (const pattern of [
+    /Do not convert this file to JSON/,
+    /Scene-plan `version` remains `1`/,
+    /Existing plans without `scene\.cues` are accepted/,
+    /Sync never rewrites the Markdown/,
+    /`representation-only` with\s+`driverReviewRequired: false`/,
+    /old parser may have included an inline `\[Click \.\.\.\]` direction in spoken\s+narration/,
+    /not enough information to infer which sentence owns each detached\s+direction/,
+  ]) {
+    assert.match(MIGRATION, pattern);
   }
   for (const pattern of [
     /Never overlap rehearsals/,
@@ -109,7 +133,7 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Jump scrolling requires an explicit user\s+request/,
     /realign or reject the take; never add a pixel fudge/,
     /Driver exit status proves function, not visual\s+alignment/,
-    /Infer and report this internally without\s+requiring the user/,
+    /Infer and\s+report this internally without requiring the user/,
     /optional\s+constraint, not a quality target/,
   ]) {
     assert.match(WORKFLOW, pattern);

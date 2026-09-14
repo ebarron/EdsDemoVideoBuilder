@@ -61,7 +61,8 @@ logic into the product driver.
 The important values and helpers are:
 
 - `page`, `context`, `manifest`, `scenePlan`, `secrets`, `workDir`,
-  `rehearsal`;
+  `rehearsal`; each `scenePlan` scene exposes ordered `cues` plus compatible
+  `narration` and `actions` projections;
 - `pause(ms)`: scaled in rehearsal;
 - `point(locator, {id, hold, layoutIntervalMs, layoutSamples,
   layoutTimeoutMs, layoutTolerancePx, maxRealignments, scroll,
@@ -136,8 +137,13 @@ functional rehearsal alone does not prove visual alignment.
 
 ## Narration ownership
 
-Treat narration fractions as action cues. Each important sentence should own
-the action it describes:
+Read each scene's ordered `cues` in source order when implementing or repairing
+the driver. A narration cue followed by an action cue documents which spoken
+context owns that action; the action cue's `actionId` resolves to the matching
+entry in `scene.actions`.
+
+Translate those relationships into narration fractions. Each important
+sentence should own the action it describes:
 
 ```js
 await scene('alert-editing', async (narration) => {

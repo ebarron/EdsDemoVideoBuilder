@@ -24,6 +24,67 @@ This is spoken narration.
     plan.scenes[0].actions.map((action) => action.direction),
     ['Open the dashboard.', 'Return to Review'],
   );
+  assert.deepEqual(
+    plan.scenes[0].cues.map((cue) => ({
+      id: cue.id,
+      kind: cue.kind,
+      value: cue.text ?? cue.actionId,
+    })),
+    [
+      {
+        id: 'opening-narration-1',
+        kind: 'narration',
+        value: 'This is spoken narration.',
+      },
+      {
+        id: 'opening-action-1',
+        kind: 'action',
+        value: 'opening-action-1',
+      },
+      {
+        id: 'opening-narration-2',
+        kind: 'narration',
+        value: 'This blockquote is also spoken.',
+      },
+      {
+        id: 'opening-action-2',
+        kind: 'action',
+        value: 'opening-action-2',
+      },
+    ],
+  );
+});
+
+test('keeps English square-bracket directions in narration order', () => {
+  const plan = parseDemoScript(`# Analytics
+
+This dashboard gives us the overview. [Click Analytics.] Now point to the morning peak.
+`, { source: 'demo.md' });
+  const scene = plan.scenes[0];
+  assert.equal(
+    scene.narration,
+    'This dashboard gives us the overview. Now point to the morning peak.',
+  );
+  assert.deepEqual(scene.actions.map(({ direction }) => direction), ['Click Analytics.']);
+  assert.deepEqual(
+    scene.cues.map((cue) => cue.kind),
+    ['narration', 'action', 'narration'],
+  );
+  assert.equal(scene.cues[0].source.startLine, 3);
+  assert.equal(scene.cues[1].source.startLine, 3);
+  assert.equal(scene.cues[2].source.startLine, 3);
+});
+
+test('does not treat ordinary Markdown links as inline directions', () => {
+  const plan = parseDemoScript(
+    '# Links\n\nRead the [Open issues](https://example.com/issues) guide first.\n',
+  );
+  assert.equal(
+    plan.scenes[0].narration,
+    'Read the [Open issues](https://example.com/issues) guide first.',
+  );
+  assert.deepEqual(plan.scenes[0].actions, []);
+  assert.deepEqual(plan.scenes[0].cues.map((cue) => cue.kind), ['narration']);
 });
 
 test('parses explicit JSON scene and action comments', () => {
@@ -34,6 +95,11 @@ The outcome passed.
   assert.equal(plan.scenes[0].id, 'proof');
   assert.equal(plan.scenes[0].actions[0].id, 'show-proof');
   assert.equal(plan.scenes[0].actions[0].success, 'Passed is visible');
+  assert.deepEqual(
+    plan.scenes[0].cues.map((cue) => cue.kind),
+    ['narration', 'action'],
+  );
+  assert.equal(plan.scenes[0].cues[1].actionId, 'show-proof');
 });
 
 test('rejects malformed explicit comments with a line number', () => {

@@ -9,7 +9,7 @@ import { parseDemoScript } from '../runtime/parser.mjs';
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
 
-test('README first-demo script separates narration and directions', () => {
+test('README first-demo script interleaves narration and directions', () => {
   const example = README.match(
     /### 1\. Write or edit the Markdown script[\s\S]*?```markdown\n([\s\S]*?)\n```/,
   )?.[1];
@@ -27,6 +27,10 @@ test('README first-demo script separates narration and directions', () => {
       'Open Analytics from the main navigation.',
       'Point to Requests per minute, then scroll to Service health.',
     ],
+  );
+  assert.deepEqual(
+    plan.scenes[0].cues.map((cue) => cue.kind),
+    ['narration', 'action', 'narration', 'action'],
   );
 });
 
@@ -55,6 +59,12 @@ test('README links resolve and prompt states safety gates', () => {
     /never changes global\s+Node\.js TLS settings/,
     /classifies the diff internally; you do not need to label it/,
     /Wording-only edits update narration without changing the driver/,
+    /English\s+square-bracket directions interleaved/,
+    /Do not collect actions in a separate section or add JSON to\s+the narration file/,
+    /reports\s+`representation-only`/,
+    /existing\s+`scene\.narration`, `scene\.actions`, driver API, and narration clip names remain\s+compatible/,
+    /old\s+parser did not recognize it inside a prose line/,
+    /never rewrites the Markdown/,
     /gh repo clone ebarron\/EdsDemoVideoBuilder "\$HOME\/\.cursor\/skills\/demo-video-builder"/,
     /"\$HOME\/\.cursor\/skills\/demo-video-builder\/scripts\/install\.sh"/,
     /git -C "\$HOME\/\.cursor\/skills\/demo-video-builder" pull --ff-only/,

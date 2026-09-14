@@ -29,10 +29,12 @@ authentication/preparation, and recording. Never set a process-wide TLS bypass.
 
 Before editing the driver, classify the change from sync output and runtime
 evidence. Narration-only changes do not touch `driver.mjs`; timing-only changes
-do not touch locators. Choreography changes alter actions, locator/layout
-changes repair the driver's semantic target factory, and functional changes
-repair boundaries or state handling. Infer and report this internally without
-requiring the user to complete a classification step.
+do not touch locators. Alignment changes move an action across a narration
+boundary and require review of its narration checkpoint. Choreography changes
+alter actions, locator/layout changes repair the driver's semantic target
+factory, and functional changes repair boundaries or state handling. Infer and
+report this internally without requiring the user to complete a classification
+step.
 
 Run structural preflight and accelerated rehearsal before generating speech or
 browser video. Preflight deliberately allows an incomplete
@@ -95,8 +97,9 @@ navigation, expandable groups, selected rows, action controls, and inputs
 critical to that demo. Driver exit status proves function, not visual
 alignment.
 
-Schedule actions at explicit narration fractions. A spoken sentence owns the
-click or typing it introduces; do not front-load all actions at scene start.
+Use each scene's ordered `cues` as the source-order map when scheduling actions
+at explicit narration fractions. A spoken sentence owns the click or typing it
+introduces; do not front-load all actions at scene start.
 
 Set `status.productionReady: true` only after a successful complete rehearsal
 and restoration proof. Production `record` rejects a driver that remains
