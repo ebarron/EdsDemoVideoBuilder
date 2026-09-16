@@ -1,14 +1,15 @@
 ---
 name: demo-video-builder
-description: Demo Video Builder creates, rehearses, records, finishes, and validates narrated Playwright browser demos from Markdown scripts. Use when the user asks to record a narrated browser demo, initialize a demo manifest and driver, repair demo selectors, finish a recording, or validate demo video artifacts.
+description: Demo Video Builder creates, rehearses, records, finishes, and validates narrated Playwright browser demos from Markdown scripts, including default Kokoro narration and final human voiceover. Use when the user asks to record a narrated browser demo, initialize a demo manifest and driver, repair demo selectors, finish or validate video artifacts, improve the synthetic voice, rerecord a video with their own voice, or use a teleprompter/teleprompt workflow.
 ---
 
 # Demo Video Builder
 
-Build real browser recordings from a Markdown narrative. This v1 is macOS-first
-for `say` narration and provides portable `clips`, `reference`, and `silent`
-modes. Keep reusable orchestration in this skill and application knowledge in a
-per-demo `demo.yaml`, normalized `scene-plan.json`, and `driver.mjs`.
+Build real browser recordings from a Markdown narrative. New demos default to
+local Kokoro ONNX narration, while existing `macos-say`, `clips`, `reference`,
+and `silent` manifests remain supported. Keep reusable orchestration in this
+skill and application knowledge in a per-demo `demo.yaml`, normalized
+`scene-plan.json`, and `driver.mjs`.
 
 The user normally edits only the Markdown script and, optionally, supplies
 voice clips. The agent owns generated configuration and browser choreography:
@@ -38,7 +39,7 @@ only for missing choices that materially affect safety or output:
 - self-signed TLS authorization only when an HTTPS demo probe reports a
   certificate error—the default is strict certificate validation;
 - output paths when omitted;
-- optional narration/browser overrides—the default is macOS synthetic speech
+- optional narration/browser overrides—the default is Kokoro synthetic speech
   and standard video settings;
 - authorization, baseline, and restoration only when the script requests a
   write—the default state policy is read-only.
@@ -228,10 +229,32 @@ Read [references/production-workflow.md](references/production-workflow.md)
 before recording and [references/narration.md](references/narration.md) for
 voice options.
 
+## Default Kokoro iteration voice
+
+New scaffolds use Kokoro with `af_heart`, `q8`, and `cpu`. Existing manifests
+retain their explicitly configured narration mode and must not be migrated
+silently. The installer and updater prepare the reproducibly locked runtime and
+pinned, verified default model; rehearsal itself remains download-free. If
+those assets are missing, the first production recording repairs them. To
+repair or prepare them explicitly, run:
+
+```bash
+node scripts/demo.mjs kokoro-setup
+```
+
+Kokoro configuration is documented in
+[references/narration.md](references/narration.md). Production creates one
+measured WAV per scene and caches it by text and synthesis settings. Preflight
+checks the isolated runtime only for Kokoro demos.
+
+The current JavaScript phonemizer uses GPL-licensed eSpeak-NG. Keep this a
+local, user-initiated runtime and do not bundle or redistribute it. Existing
+narration modes must not import, install, probe, or download Kokoro assets.
+
 ## Record, finish, and verify
 
-Run production `macos-say` recording outside restricted sandboxes so `say` can
-write audio:
+When using `macos-say`, run production recording outside restricted sandboxes
+so `say` can write audio:
 
 ```bash
 node scripts/demo.mjs record --manifest path/to/demo.yaml
@@ -268,10 +291,47 @@ exists or finishing/validation needs recovery.
 
 ## Human narration
 
-For final human delivery, prefer segmented clips named by scene. Record and
-approve audio first, switch `narration.mode` to `clips`, set `audioFirst: true`,
-and rehearse browser pacing against measured clip durations. `reference` keeps
-one supplied track; `silent` records a video with a bounded silent AAC stream.
+Keep the synthetic version through iteration. After the user approves a
+finished picture, treat natural-language requests such as these as a direct
+voiceover-studio trigger:
+
+- “Now let’s rerecord the video with my own voice using the teleprompter.”
+- “Open the teleprompter so I can narrate this demo.”
+- “Replace the synthetic narration with my voice.”
+
+Do not require the user to name a command, manifest, or workflow when the
+current demo is unambiguous from recent context and finished artifacts. Locate
+its manifest, confirm the finished synthetic video and timeline are available,
+then open the studio. Ask only which demo to use when multiple plausible
+picture-lock candidates exist.
+
+The equivalent internal command is:
+
+```bash
+node scripts/demo.mjs voiceover --manifest path/to/demo.yaml
+```
+
+The studio must play the locked video muted, show the current and next spoken
+cues, request microphone permission in the local browser, and retain every full
+or scene-level take. It normalizes accepted recordings to 48 kHz mono WAV.
+Overlong takes require a natural retake; never speed up human speech or browser
+motion.
+
+After the user saves and closes the studio, finish and verify the separate
+human-voice output automatically unless they asked only to capture takes:
+
+```bash
+node scripts/demo.mjs voiceover-finish --manifest path/to/demo.yaml
+node scripts/demo.mjs voiceover-verify --manifest path/to/demo.yaml
+```
+
+The session preserves an immutable picture-lock package and the synthetic
+outputs. Human artifacts use separate `-human` names. If the picture changed,
+use `voiceover --new-session`; never attach prior takes to a different video.
+Read [references/human-voiceover.md](references/human-voiceover.md).
+
+Existing `clips` and `reference` workflows remain available for externally
+recorded audio.
 
 ## Sharing
 

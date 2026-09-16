@@ -2,6 +2,12 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import {
+  KOKORO_MODEL_REVISION,
+  kokoroSettings,
+  prepareKokoroScene,
+} from './kokoro.mjs';
+
 const CLIP_EXTENSIONS = ['.aiff', '.aif', '.wav', '.m4a', '.mp3'];
 
 export function estimateNarrationDuration(text, rate = 160) {
@@ -36,7 +42,7 @@ function findClip(directory, id) {
   throw new Error(`Missing narration clip for scene ${id} in ${directory}`);
 }
 
-export function prepareNarration({
+function prepareStandardNarration({
   manifest,
   scenePlan,
   workDir,
@@ -86,4 +92,71 @@ export function prepareNarration({
     if (!rehearsal) requireDuration(referenceFile, ffmpeg);
   }
   return { mode, pace, segments, referenceFile };
+}
+
+async function prepareKokoroNarration({
+  manifest,
+  scenePlan,
+  workDir,
+  rehearsal,
+  ffmpeg,
+  kokoroProvider,
+}) {
+  const mode = manifest.narration.mode;
+  const pace = rehearsal ? manifest.timing.rehearsalScale : 1;
+  const segments = new Map();
+  const audioDir = path.join(workDir, 'audio');
+  const settings = kokoroSettings(manifest);
+  if (!rehearsal) fs.mkdirSync(audioDir, { recursive: true, mode: 0o700 });
+
+  for (const scene of scenePlan.scenes) {
+    if (!scene.narration) continue;
+    let file = null;
+    let cache = null;
+    let duration = scene.timing?.duration ??
+      (estimateNarrationDuration(
+        scene.narration,
+        scene.timing?.rate ?? manifest.narration.rate ?? 160,
+      ) / settings.speed);
+    if (!rehearsal) {
+      file = path.join(audioDir, `${scene.id}.wav`);
+      cache = await prepareKokoroScene({
+        text: scene.narration,
+        output: file,
+        settings,
+        ffmpeg,
+        provider: kokoroProvider,
+      });
+      duration = requireDuration(file, ffmpeg);
+    }
+    segments.set(scene.id, {
+      id: scene.id,
+      file,
+      duration,
+      runtimeDuration: duration * pace,
+      ...(cache ? { cacheHit: cache.cacheHit, cacheKey: cache.key } : {}),
+    });
+  }
+  return {
+    mode,
+    pace,
+    segments,
+    referenceFile: null,
+    metadata: {
+      provider: 'kokoro-js',
+      packageVersion: settings.packageVersion,
+      model: settings.model,
+      modelRevision: KOKORO_MODEL_REVISION,
+      voice: settings.voice,
+      speed: settings.speed,
+      dtype: settings.dtype,
+      device: settings.device,
+    },
+  };
+}
+
+export function prepareNarration(options) {
+  return options.manifest.narration.mode === 'kokoro'
+    ? prepareKokoroNarration(options)
+    : prepareStandardNarration(options);
 }

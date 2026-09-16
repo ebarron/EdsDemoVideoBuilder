@@ -23,8 +23,10 @@ test('installer is executable, idempotent, and verifies required tooling', () =>
     /command -v gh/,
     /Node\.js 20/,
     /command -v npm/,
+    /command -v curl/,
     /npm ci/,
     /playwright" install chromium/,
+    /node scripts\/demo\.mjs kokoro-setup/,
     /npm run smoke/,
     /npm test/,
     /node scripts\/demo\.mjs help/,
@@ -45,6 +47,7 @@ test('fresh-clone layout installs twice from an arbitrary directory', () => {
     assert.equal(tracked.status, 0, tracked.stderr.toString());
     for (const relative of tracked.stdout.toString().split('\0').filter(Boolean)) {
       const source = path.join(ROOT, relative);
+      if (!fs.existsSync(source)) continue;
       const destination = path.join(checkout, relative);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.copyFileSync(source, destination);
@@ -100,6 +103,7 @@ fi
     for (const invocation of [
       'npm ci --no-audit --no-fund',
       'playwright install chromium',
+      'node scripts/demo.mjs kokoro-setup',
       'npm run smoke',
       'npm test',
       'node scripts/demo.mjs help',
@@ -132,9 +136,11 @@ test('repository ignores generated demos, captures, media, and auth state', () =
   const ignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
   for (const pattern of [
     /^node_modules\/$/m,
+    /^\.kokoro-runtime\/$/m,
     /^\/demos\/$/m,
     /^playwright-report\/$/m,
     /^\*\*\/storage-state\*\.json$/m,
+    /^\*\*\/\*-voiceover\/$/m,
     /^\*\*\/\*\.mp4$/m,
     /^\*\*\/\*\.wav$/m,
   ]) {

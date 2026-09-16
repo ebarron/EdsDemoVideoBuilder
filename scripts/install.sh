@@ -22,12 +22,15 @@ NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')" ||
 
 command -v npm >/dev/null 2>&1 ||
   fail "npm is required. Install it with Node.js, then rerun this script."
+command -v curl >/dev/null 2>&1 ||
+  fail "curl is required to install the verified Kokoro model."
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$ROOT"
 
 npm ci --no-audit --no-fund
 "$ROOT/node_modules/.bin/playwright" install chromium
+node scripts/demo.mjs kokoro-setup
 npm run smoke
 npm test
 node scripts/demo.mjs help >/dev/null

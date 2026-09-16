@@ -19,7 +19,31 @@ export { checkUrl, startLifecycle, waitForUrl } from './lifecycle.mjs';
 export { createBrowserHelpers, installDemoPointer, installDemoZoom } from './browser.mjs';
 export { DemoTimeline, mapTime, validateCompressions } from './timeline.mjs';
 export { estimateNarrationDuration, prepareNarration } from './narration.mjs';
+export {
+  ensureKokoroModel,
+  defaultKokoroCacheDir,
+  defaultKokoroRuntimeDir,
+  KOKORO_MODEL,
+  KOKORO_MODEL_REVISION,
+  kokoroModelStatus,
+  kokoroRuntimeStatus,
+  kokoroSettings,
+  setupKokoroRuntime,
+} from './kokoro.mjs';
 export { runDemo } from './recorder.mjs';
 export { buildFilterGraph, finishRecording, resolveFfmpeg } from './ffmpeg.mjs';
 export { preflightDemo } from './preflight.mjs';
 export { verifyRecording } from './validator.mjs';
+export {
+  buildVoiceoverAudioGraph,
+  buildVoiceoverPrompts,
+  clearVoiceoverAcceptance,
+  createVoiceoverSession,
+  finishVoiceover,
+  readVoiceoverSession,
+  voiceoverPaths,
+  voiceoverTimingFit,
+  voiceoverVerificationManifest,
+  verifyVoiceoverArtifacts,
+} from './voiceover.mjs';
+export { createVoiceoverStudio } from './voiceover-studio.mjs';

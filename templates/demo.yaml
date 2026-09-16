@@ -25,11 +25,16 @@ auth:
   env: {}
 
 narration:
-  mode: macos-say
-  voice: Samantha
+  mode: kokoro
   rate: 160
   defaultOffsetSeconds: 0.5
   audioFirst: false
+  kokoro:
+    voice: af_heart
+    speed: 1
+    dtype: q8
+    device: cpu
+    allowModelDownload: true
 
 timing:
   rehearsalScale: 0.15

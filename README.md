@@ -16,6 +16,9 @@ gh repo clone ebarron/EdsDemoVideoBuilder "$HOME/.cursor/skills/demo-video-build
 "$HOME/.cursor/skills/demo-video-builder/scripts/install.sh"
 ```
 
+The installer also prepares Chromium, the locked Kokoro runtime, and its
+verified default `q8` model (about 92 MB), so new demos are ready to record.
+
 Start a new Cursor chat or reload Cursor after installation so
 `/demo-video-builder` is discovered across projects.
 
@@ -97,10 +100,10 @@ git -C "$HOME/.cursor/skills/demo-video-builder" pull --ff-only
 
 ## Defaults and discovery
 
-When omitted, the skill uses synthetic narration, standard video settings, and
-fast internal checks before expensive capture. It inspects the repository and
-running app for start, authentication, readiness, and state information, then
-asks when uncertain.
+When omitted, new demos use Kokoro synthetic narration with the `af_heart`
+voice, standard video settings, and fast internal checks before expensive
+capture. It inspects the repository and running app for start, authentication,
+readiness, and state information, then asks when uncertain.
 
 Recorded interactions default to visible pointer travel, sequential typing for
 text the viewer should read, slow smooth scrolling instead of viewport jumps,
@@ -207,15 +210,78 @@ previous plan and never rewrites the Markdown.
 See [Ordered-cue migration](references/ordered-cues-migration.md) for the
 upgrade checklist and expected sync classifications.
 
+## Default synthetic voice
+
+New demos default to Kokoro ONNX with `af_heart`. Existing manifests keep their
+explicitly configured narration mode, including `macos-say`, and are not
+silently migrated. Install and update prepare the separate locked runtime and
+verified default model. To repair or prepare them manually:
+
+```bash
+node scripts/demo.mjs kokoro-setup
+```
+
+The generated agent-managed configuration is:
+
+```yaml
+narration:
+  mode: kokoro
+  defaultOffsetSeconds: 0.5
+  audioFirst: false
+  kokoro:
+    voice: af_heart
+    speed: 1
+    dtype: q8
+    device: cpu
+    allowModelDownload: true
+```
+
+Rehearsal remains download-free. Model assets come from a pinned revision and
+pass size and cryptographic digest checks before loading. Generated WAV clips
+are measured and cached by text and synthesis settings. Existing non-Kokoro
+demos retain their provider unchanged; the installed Kokoro assets are not
+loaded by those recordings.
+
 ## Using your own voice
 
-Finish the script first. Make a rough reference narration so Cursor can
-rehearse the pacing. For the final version, supply either one clip per scene
-(best alignment) or one continuous narration track. Cursor measures the audio,
-aligns browser actions, rehearses again, and records a synchronized take.
+Keep synthetic narration while iterating. Once a finished video is approved
+enough to lock, you can simply say:
 
-See [Narration modes](references/narration.md) for clip names, supported
-formats, and audio-first pacing.
+> Okay, now let’s rerecord the video with my own voice using the teleprompter.
+
+When the current demo is unambiguous, the skill finds its manifest and opens
+the muted picture-locked studio without requiring command names or paths. It
+asks which demo only when multiple finished candidates are plausible.
+
+You can also be explicit:
+
+> Use the `demo-video-builder` skill to open the human voiceover studio for
+> `<path-to-demo.yaml>`. Play the approved video muted with its teleprompter,
+> preserve all takes, then finish and verify a separate human-voice version.
+
+The equivalent low-level commands are:
+
+```bash
+node scripts/demo.mjs voiceover --manifest path/to/demo.yaml
+node scripts/demo.mjs voiceover-finish --manifest path/to/demo.yaml
+node scripts/demo.mjs voiceover-verify --manifest path/to/demo.yaml
+```
+
+The video is always muted in the local, token-protected studio; no synthetic
+audio plays. It supports a
+continuous full take and scene-level punch-in retakes, normalizes microphone
+recordings to 48 kHz mono WAV, retains take history, and reports whether scene
+retakes fit their available windows. Overlong speech requires a natural retake;
+it is never automatically sped up.
+
+Starting the studio creates an immutable picture-lock package, including the
+approved video, timeline, script, scene plan, contact sheet, and raw take when
+available. Human output uses `-human` filenames and never overwrites the
+synthetic version. If the approved video changes, start a preserved new session
+with `--new-session`.
+
+See [Narration modes](references/narration.md) and
+[Human voiceover](references/human-voiceover.md) for details.
 
 ## What you touch
 
@@ -265,6 +331,7 @@ Detailed references:
 
 - [Production workflow](references/production-workflow.md)
 - [Ordered-cue migration](references/ordered-cues-migration.md)
+- [Human voiceover](references/human-voiceover.md)
 - [Manifest reference](references/manifest.md)
 - [Driver API](references/driver-api.md)
 - [FFmpeg and validation](references/ffmpeg-and-validation.md)

@@ -21,7 +21,8 @@ relative to the manifest file.
   names used by the driver to environment-variable names. `storageStateEnv`
   names an environment variable containing a path to a mode-0600 Playwright
   state file.
-- `narration.mode` is `macos-say`, `clips`, `reference`, or `silent`.
+- `narration.mode` is `macos-say`, `kokoro`, `clips`, `reference`, or
+  `silent`. New scaffolds use Kokoro and its nested configuration.
 - `timing` controls rehearsal scale, successful-wait compression target,
   visible label, and tail padding.
 - `state.policy` is `read-only` or `restore`; `mutatingActions` must match the
@@ -30,6 +31,40 @@ relative to the manifest file.
   and timeline are never overwritten unless `finish --force` is explicit.
 - `tools.ffmpegEnv`, when present, names an environment variable containing
   the FFmpeg executable path.
+
+## Default Kokoro narration
+
+Existing manifests remain valid and keep their declared provider. New
+scaffolds default to Kokoro. Its configuration is nested so speed and model
+settings cannot alter another narration provider:
+
+```yaml
+narration:
+  mode: kokoro
+  defaultOffsetSeconds: 0.5
+  audioFirst: false
+  kokoro:
+    model: onnx-community/Kokoro-82M-v1.0-ONNX
+    voice: af_heart
+    speed: 1
+    dtype: q8
+    device: cpu
+    allowModelDownload: true
+```
+
+`model` and `cacheDir` are optional; the runtime uses the pinned model and
+user-cache path by default. If `model` is present, it must name that pinned
+model; arbitrary remote code or weights are rejected. `speed` accepts `0.5`
+through `2`, and `dtype`
+accepts `q8`, `q4`, `q4f16`, `fp16`, or `fp32`. The Node provider currently
+requires `device: cpu`.
+
+`allowModelDownload` defaults to `true` only after `mode: kokoro` has been
+selected. Set it to `false` for cache-only operation. Install/update runs
+`kokoro-setup`, placing the provider in the installed skill's ignored
+`.kokoro-runtime` directory and the verified default model in the user cache.
+Production repairs missing assets. Generated-audio caches remain under the
+user cache unless `cacheDir` overrides them.
 
 ## Self-signed TLS
 

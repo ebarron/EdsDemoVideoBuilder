@@ -38,6 +38,8 @@ test('generates manifest, driver, normalized plan, and notes without overwrite',
   const generatedManifest = loadManifest(path.join(output, 'demo.yaml')).manifest;
   assert.equal(generatedManifest.id, 'example-demo');
   assert.equal(generatedManifest.app.allowInsecureTls, false);
+  assert.equal(generatedManifest.narration.mode, 'kokoro');
+  assert.equal(generatedManifest.narration.kokoro.voice, 'af_heart');
   assert.throws(
     () => writeScaffold({
       script,

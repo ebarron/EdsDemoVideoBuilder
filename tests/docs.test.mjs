@@ -23,6 +23,11 @@ const MIGRATION = fs.readFileSync(
   path.join(ROOT, 'references', 'ordered-cues-migration.md'),
   'utf8',
 );
+const NARRATION = fs.readFileSync(path.join(ROOT, 'references', 'narration.md'), 'utf8');
+const VOICEOVER = fs.readFileSync(
+  path.join(ROOT, 'references', 'human-voiceover.md'),
+  'utf8',
+);
 const SCRIPT_CONVENTION = fs.readFileSync(
   path.join(ROOT, 'references', 'script-convention.md'),
   'utf8',
@@ -68,6 +73,14 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Preserve\s+`timeline.meta.videoStart` as that media-clock origin/,
     /legacy captures use\s+`videoStart \?\? 0`/,
     /duration as an optional\s+constraint, never as the quality goal/,
+    /New scaffolds use Kokoro with `af_heart`, `q8`, and `cpu`/,
+    /Existing manifests\s+retain their explicitly configured narration mode/,
+    /Existing\s+narration modes must not import, install, probe, or download Kokoro assets/,
+    /rerecord the video with my own voice using the teleprompter/i,
+    /Do not require the user to name a command, manifest, or workflow/,
+    /finish and verify the separate\s+human-voice output automatically/,
+    /studio must play the locked video muted/,
+    /Human artifacts use separate `-human` names/,
   ]) {
     assert.match(SKILL, pattern);
   }
@@ -100,6 +113,8 @@ test('skill documents watchable and resilient driver defaults', () => {
     /ignoreHTTPSErrors: true` on both the unrecorded\s+authentication\/preparation context and the recorded browser context/,
     /Preflight and lifecycle checks also accept the self-signed certificate/,
     /Never use\s+`NODE_TLS_REJECT_UNAUTHORIZED=0`/,
+    /`narration\.mode` is `macos-say`, `kokoro`, `clips`, `reference`, or\s+`silent`/,
+    /Install\/update runs\s+`kokoro-setup`/,
   ]) {
     assert.match(MANIFEST, pattern);
   }
@@ -135,7 +150,28 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Driver exit status proves function, not visual\s+alignment/,
     /Infer and\s+report this internally without requiring the user/,
     /optional\s+constraint, not a quality target/,
+    /Kokoro is the default narration provider for new demos/,
+    /Prefer a continuous master for natural delivery/,
   ]) {
     assert.match(WORKFLOW, pattern);
+  }
+  for (const pattern of [
+    /node scripts\/demo\.mjs kokoro-setup/,
+    /Rehearsal uses duration estimates and\s+does not load or download the model/,
+    /cached by\s+text, provider\/model, voice, speed, precision, and device/,
+    /phonemizer uses\s+eSpeak-NG/,
+  ]) {
+    assert.match(NARRATION, pattern);
+  }
+  for (const pattern of [
+    /video is always muted/,
+    /Record full take/,
+    /Record selected scene/,
+    /48 kHz mono PCM WAV/,
+    /does not speed up\s+speech/,
+    /voiceover-finish/,
+    /Synthetic outputs are never overwritten/,
+  ]) {
+    assert.match(VOICEOVER, pattern);
   }
 });

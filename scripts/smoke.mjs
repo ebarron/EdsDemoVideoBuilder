@@ -8,6 +8,7 @@ import { chromium } from '@playwright/test';
 import ffmpeg from 'ffmpeg-static';
 
 import { createBrowserHelpers, installDemoPointer } from '../runtime/browser.mjs';
+import { voiceoverStudioHtml } from '../runtime/voiceover-ui.mjs';
 
 assert.ok(ffmpeg && fs.existsSync(ffmpeg), 'Package-local FFmpeg binary is missing');
 const ffmpegVersion = spawnSync(ffmpeg, ['-version'], { encoding: 'utf8' });
@@ -62,8 +63,19 @@ try {
   assert.equal(await page.locator('body').getAttribute('data-clicked'), 'true');
   assert.equal(timeline.actions.at(-1).pointerProof.overlap, true);
   assert.equal(timeline.actions.at(-1).pointerProof.hitMatches, true);
+
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.setContent(voiceoverStudioHtml('smoke-token'));
+  assert.equal(
+    await page.getByRole('button', { name: 'Record full take' }).isVisible(),
+    true,
+  );
+  assert.equal(await page.getByLabel('Microphone').isVisible(), true);
+  assert.equal(await page.locator('video').evaluate((element) => element.muted), true);
+  assert.deepEqual(pageErrors, []);
 } finally {
   await browser?.close();
 }
 
-console.log('Playwright pointer alignment, Chromium, and package-local FFmpeg are ready.');
+console.log('Pointer alignment, voiceover studio, Chromium, and package-local FFmpeg are ready.');

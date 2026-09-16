@@ -95,3 +95,41 @@ test('allows audio-first only with supplied audio', () => {
   };
   assert.equal(validateManifestObject(value).valid, true);
 });
+
+test('validates default Kokoro settings while retaining existing providers', () => {
+  const value = manifest();
+  value.narration = {
+    mode: 'kokoro',
+    defaultOffsetSeconds: 0.5,
+    audioFirst: false,
+    kokoro: {
+      voice: 'af_heart',
+      speed: 1,
+      dtype: 'q8',
+      device: 'cpu',
+      cacheDir: './kokoro-cache',
+      allowModelDownload: true,
+    },
+  };
+  assert.equal(validateManifestObject(value).valid, true);
+
+  const invalidSpeed = structuredClone(value);
+  invalidSpeed.narration.kokoro.speed = 3;
+  assert.equal(validateManifestObject(invalidSpeed).valid, false);
+
+  const invalidVoice = structuredClone(value);
+  invalidVoice.narration.kokoro.voice = 'Samantha';
+  assert.equal(validateManifestObject(invalidVoice).valid, false);
+
+  const unpinnedModel = structuredClone(value);
+  unpinnedModel.narration.kokoro.model = 'example/unverified-model';
+  assert.equal(validateManifestObject(unpinnedModel).valid, false);
+
+  const missingConfig = manifest();
+  missingConfig.narration = {
+    mode: 'kokoro',
+    defaultOffsetSeconds: 0.5,
+    audioFirst: false,
+  };
+  assert.equal(validateManifestObject(missingConfig).valid, false);
+});

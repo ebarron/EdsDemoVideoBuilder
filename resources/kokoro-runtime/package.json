@@ -1,0 +1,8 @@
+{
+  "name": "demo-video-builder-kokoro-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "kokoro-js": "1.2.1"
+  }
+}

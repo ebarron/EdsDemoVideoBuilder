@@ -1,5 +1,6 @@
 # Dependencies and package-manager state
 node_modules/
+.kokoro-runtime/
 .npm/
 .npmrc
 npm-debug.log*
@@ -17,6 +18,7 @@ blob-report/
 /output/
 /captures/
 /raw/
+**/*-voiceover/
 **/scene-plan.json
 **/building-the-video.md
 **/*.bak-*

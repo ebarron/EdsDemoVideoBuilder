@@ -2,6 +2,11 @@ import fs from 'node:fs';
 
 import { materializeEnvironment, readScenePlan, referencedEnvironment } from './config.mjs';
 import { resolveFfmpeg } from './ffmpeg.mjs';
+import {
+  kokoroModelStatus,
+  kokoroRuntimeStatus,
+  kokoroSettings,
+} from './kokoro.mjs';
 import { checkUrl } from './lifecycle.mjs';
 import { loadDriver, loadPlaywright } from './recorder.mjs';
 
@@ -62,6 +67,32 @@ export async function preflightDemo(manifest, environment = process.env) {
   if (manifest.narration.mode === 'macos-say') {
     check('macOS say', fs.existsSync('/usr/bin/say'), '/usr/bin/say');
     check('macOS afinfo', fs.existsSync('/usr/bin/afinfo'), '/usr/bin/afinfo');
+  } else if (manifest.narration.mode === 'kokoro') {
+    try {
+      const settings = kokoroSettings(manifest);
+      const status = kokoroRuntimeStatus();
+      const model = kokoroModelStatus(settings);
+      check(
+        'Kokoro runtime',
+        status.installed,
+        status.installed
+          ? `${status.package} (${settings.voice}, ${settings.dtype}, ${settings.device})`
+          : `${status.package} runtime is unavailable${
+            status.error ? ` (${status.error})` : ''
+          }; run demo.mjs kokoro-setup`,
+      );
+      check(
+        'Kokoro model policy',
+        model.installed || settings.allowModelDownload,
+        model.installed
+          ? `verified pinned ${settings.dtype} model in ${model.root}`
+          : settings.allowModelDownload
+            ? `model may download into ${model.root} on first production use`
+            : `offline cache is incomplete (${model.missing.join(', ')})`,
+      );
+    } catch (error) {
+      check('Kokoro configuration', false, error.message);
+    }
   }
   try {
     await loadPlaywright();

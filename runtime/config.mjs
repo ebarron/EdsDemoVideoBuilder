@@ -16,6 +16,7 @@ const PATH_FIELDS = [
   'app.cwd',
   'narration.clipsDir',
   'narration.referenceFile',
+  'narration.kokoro.cacheDir',
   'output.workDir',
   'output.video',
   'output.contactSheet',

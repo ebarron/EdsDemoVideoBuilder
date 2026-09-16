@@ -50,8 +50,16 @@ validation.
 ## Production and validation
 
 - Narration source/mode:
+- Kokoro runtime/model/voice/cache policy when selected:
 - Observed waits compressed:
 - Final duration and whether it was a requested constraint:
 - Decode and metadata checks:
 - Contact-sheet review:
 - Rejected takes and reason:
+
+## Human voiceover
+
+- Picture-lock session:
+- Accepted full take and scene retakes:
+- Timing-fit findings and required retakes:
+- Human output and verification:

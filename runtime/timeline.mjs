@@ -19,6 +19,7 @@ export class DemoTimeline {
       narration: {
         mode: manifest.narration.mode,
         referenceFile: narration.referenceFile ?? null,
+        ...(narration.metadata ?? {}),
       },
     };
   }

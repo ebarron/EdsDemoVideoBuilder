@@ -181,7 +181,8 @@
       "required": ["mode", "defaultOffsetSeconds", "audioFirst"],
       "properties": {
         "mode": {
-          "enum": ["macos-say", "clips", "reference", "silent"]
+          "enum": ["macos-say", "kokoro", "clips", "reference", "silent"],
+          "default": "kokoro"
         },
         "voice": {
           "type": "string",
@@ -205,6 +206,64 @@
         },
         "audioFirst": {
           "type": "boolean"
+        },
+        "kokoro": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "const": "onnx-community/Kokoro-82M-v1.0-ONNX"
+            },
+            "voice": {
+              "enum": [
+                "af_heart",
+                "af_alloy",
+                "af_aoede",
+                "af_bella",
+                "af_jessica",
+                "af_kore",
+                "af_nicole",
+                "af_nova",
+                "af_river",
+                "af_sarah",
+                "af_sky",
+                "am_adam",
+                "am_echo",
+                "am_eric",
+                "am_fenrir",
+                "am_liam",
+                "am_michael",
+                "am_onyx",
+                "am_puck",
+                "am_santa",
+                "bf_alice",
+                "bf_emma",
+                "bf_isabella",
+                "bf_lily",
+                "bm_daniel",
+                "bm_fable",
+                "bm_george",
+                "bm_lewis"
+              ]
+            },
+            "speed": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 2
+            },
+            "dtype": {
+              "enum": ["q8", "q4", "q4f16", "fp16", "fp32"]
+            },
+            "device": {
+              "const": "cpu"
+            },
+            "cacheDir": {
+              "$ref": "#/$defs/path"
+            },
+            "allowModelDownload": {
+              "type": "boolean"
+            }
+          }
         }
       },
       "allOf": [
@@ -218,6 +277,18 @@
           },
           "then": {
             "required": ["voice", "rate"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "kokoro"
+              }
+            }
+          },
+          "then": {
+            "required": ["kokoro"]
           }
         },
         {

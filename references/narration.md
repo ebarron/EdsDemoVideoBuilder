@@ -2,8 +2,11 @@
 
 ## Simple human-voice workflow
 
-Finish the Markdown first, then make a rough reference read so Cursor can
-rehearse the intended pacing. For the final take:
+Keep synthetic narration through script and choreography iteration. After the
+finished video is approved, use the built-in muted teleprompter and microphone
+studio described in [Human voiceover](human-voiceover.md).
+
+Existing external-audio workflows remain supported:
 
 - use one clip per scene with `clips` for the strongest action alignment; or
 - use one continuous track with `reference` when a single uninterrupted read
@@ -22,6 +25,62 @@ the manifest; a scene may override `timing.rate`.
 Some sandboxes let `say` exit successfully while producing empty audio. Run a
 production take with the required host permissions. The duration check rejects
 that failure before recording proceeds.
+
+## kokoro
+
+Kokoro ONNX is the higher-quality default for newly initialized demos.
+Existing manifests retain their explicitly configured mode, including
+`macos-say`.
+
+Install and update prepare its isolated local runtime and verified default
+model. To repair them manually:
+
+```bash
+node scripts/demo.mjs kokoro-setup
+```
+
+Then configure only the selected demo:
+
+```yaml
+narration:
+  mode: kokoro
+  defaultOffsetSeconds: 0.5
+  audioFirst: false
+  kokoro:
+    voice: af_heart
+    speed: 1
+    dtype: q8
+    device: cpu
+    allowModelDownload: true
+```
+
+The pinned provider is `kokoro-js@1.2.1` with
+`onnx-community/Kokoro-82M-v1.0-ONNX` at an immutable repository revision.
+Rehearsal uses duration estimates and does not load or download the model.
+Install/update—or production self-repair if assets are missing—places model
+assets in
+`~/Library/Caches/demo-video-builder/kokoro`; subsequent audio is cached by
+text, provider/model, voice, speed, precision, and device. Set
+`allowModelDownload: false` to require an already populated offline cache.
+Every tokenizer and ONNX asset is validated against its pinned size and
+cryptographic digest before loading. A corrupt or partial cache is rejected,
+and downloads are written atomically.
+Executable provider dependencies live in the installed skill's ignored
+`.kokoro-runtime` directory so they are isolated from normal dependencies. The
+setup command uses the skill's checked-in dependency lockfile and preflight
+rejects an incomplete, ancestor-resolved, or differently locked runtime.
+
+The default `q8` model is roughly 92 MB. Supported American and British voices
+include `af_heart`, `af_bella`, `af_nicole`, `am_fenrir`, `am_michael`,
+`bf_emma`, `bf_isabella`, `bm_fable`, and `bm_george`. `speed` ranges from
+`0.5` through `2`; `1` is unchanged speed. Long scenes are split at sentence
+boundaries before synthesis to avoid the model's token limit, then assembled
+into one measured WAV per scene.
+
+Kokoro model weights are Apache-2.0. The current JavaScript phonemizer uses
+eSpeak-NG, which carries GPL obligations. The installer downloads that runtime
+locally; it is not committed to or redistributed from this repository. Obtain
+organizational licensing review before redistributing the downloaded runtime.
 
 ## clips
 

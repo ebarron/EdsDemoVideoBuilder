@@ -235,7 +235,7 @@ export async function runDemo(manifest, {
   const workDir = resetWorkDir(manifest.output.workDir);
   const scenePlan = readScenePlan(manifest);
   const ffmpeg = resolveFfmpeg(manifest, environment);
-  const narration = prepareNarration({
+  const narration = await prepareNarration({
     manifest,
     scenePlan,
     workDir,

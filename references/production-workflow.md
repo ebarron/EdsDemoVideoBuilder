@@ -36,6 +36,12 @@ factory, and functional changes repair boundaries or state handling. Infer and
 report this internally without requiring the user to complete a classification
 step.
 
+Kokoro is the default narration provider for new demos. Install/update prepares
+its isolated locked runtime and verified model; production repairs missing
+assets. Existing manifests retain their declared provider. Generate measured
+scene WAV files and reuse the content-addressed cache across takes. Do not
+import or probe Kokoro while preparing another narration mode.
+
 Run structural preflight and accelerated rehearsal before generating speech or
 browser video. Preflight deliberately allows an incomplete
 `productionReady: false` driver: readiness is reported separately as
@@ -132,7 +138,20 @@ decode, codec/size/fps/sample-rate metadata, faststart atom order, contact
 sheet, and distinct progressive frames. Inspect the contact sheet and the
 start/middle/end of every pan manually.
 
-## 7. Update notes
+## 7. Optional human voiceover
+
+Do not record final human delivery while picture timing is still changing.
+After synthetic finish and verification, create an immutable voiceover session
+and open the local muted teleprompter. Preserve the synthetic output and every
+microphone take.
+
+Prefer a continuous master for natural delivery, with scene-level punch-ins
+for repairs. Reject takes that exceed the locked window instead of changing
+speech speed or important browser motion. Finish to separate `-human` outputs
+and run the same media verification contract. If picture changes, create a new
+session rather than reusing timing from the old lock.
+
+## 8. Update notes
 
 Record exact working locators, state hooks, observed compression intervals,
 rejected takes, validation results, and environment changes in the per-demo
