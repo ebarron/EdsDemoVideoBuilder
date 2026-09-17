@@ -6,6 +6,8 @@ import test from 'node:test';
 
 import {
   ensureKokoroModel,
+  generateKokoroChunks,
+  KokoroTokenLimitError,
   kokoroSettings,
   splitKokoroText,
 } from '../runtime/kokoro.mjs';
@@ -117,9 +119,16 @@ test('Kokoro production caches measured WAV clips by synthesis settings', async 
   };
   let generations = 0;
   const provider = {
-    async generateScene(_text, output) {
+    async generateScene(text, output) {
       generations += 1;
       writeWave(output);
+      const generated = await generateKokoroChunks({
+        text,
+        async generate(chunk) {
+          return { tokenCount: chunk.length + 2 };
+        },
+      });
+      return { coverage: generated.coverage };
     },
   };
   const first = await prepareNarration({
@@ -143,6 +152,8 @@ test('Kokoro production caches measured WAV clips by synthesis settings', async 
   assert.equal(first.segments.get('opening').cacheHit, false);
   assert.equal(second.segments.get('opening').cacheHit, true);
   assert.equal(first.segments.get('opening').duration > 0.9, true);
+  assert.equal(first.segments.get('opening').coverage.complete, true);
+  assert.equal(second.segments.get('opening').coverage.maxTokenCount > 0, true);
   assert.equal(fs.existsSync(second.segments.get('opening').file), true);
 });
 
@@ -203,4 +214,32 @@ test('Kokoro remains outside normal dependencies and requires verified offline a
     300,
     101,
   ]);
+  const defaultChunks = splitKokoroText(
+    `${'A '.repeat(115)}first sentence. ${'B '.repeat(165)}second sentence.`,
+  );
+  assert.deepEqual(defaultChunks.map((chunk) => chunk.length), [245, 346]);
+  assert.equal(defaultChunks.join(' ').endsWith('second sentence.'), true);
+});
+
+test('Kokoro recursively splits exact tokenizer overflows without losing narration', async () => {
+  const text = Array.from({ length: 616 }, (_, index) => `word${index}`).join(' ');
+  const generated = await generateKokoroChunks({
+    text,
+    initialMaxCharacters: 10_000,
+    async generate(chunk) {
+      const tokenCount = chunk.split(/\s+/).length + 2;
+      if (tokenCount > 512) throw new KokoroTokenLimitError(tokenCount);
+      return { tokenCount };
+    },
+  });
+
+  assert.equal(generated.chunks.length, 2);
+  assert.equal(generated.coverage.complete, true);
+  assert.equal(generated.coverage.sourceCharacters, text.length);
+  assert.equal(generated.coverage.sourceNonWhitespaceCharacters, text.replace(/\s+/g, '').length);
+  assert.equal(generated.coverage.maxTokenCount <= 512, true);
+  assert.equal(
+    generated.chunks.map((chunk) => chunk.text).join(' ').replace(/\s+/g, ' '),
+    text,
+  );
 });

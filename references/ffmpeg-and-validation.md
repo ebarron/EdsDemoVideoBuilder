@@ -40,7 +40,10 @@ unless `--force` is explicit. `verify`:
 3. confirms the `moov` atom precedes media data;
 4. fully decodes both streams under a safety timeout;
 5. samples progressive frame hashes;
-6. requires the generated contact sheet and final timeline.
+6. requires the generated contact sheet and final timeline;
+7. for Kokoro, matches every narrated source scene to complete token-safe
+   synthesis coverage;
+8. rejects substantial unexplained silence inside Kokoro narration windows.
 
 These checks do not replace visual review. Inspect compressed boundaries for a
 visible initiation, no failed state, and a clean successful destination.

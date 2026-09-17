@@ -238,9 +238,11 @@ narration:
 
 Rehearsal remains download-free. Model assets come from a pinned revision and
 pass size and cryptographic digest checks before loading. Generated WAV clips
-are measured and cached by text and synthesis settings. Existing non-Kokoro
-demos retain their provider unchanged; the installed Kokoro assets are not
-loaded by those recordings.
+are measured and cached by text and synthesis settings. Tokenizer truncation
+is disabled; over-limit narration is recursively split, and final validation
+requires complete source-to-audio coverage while rejecting unexplained silence.
+Existing non-Kokoro demos retain their provider unchanged; the installed
+Kokoro assets are not loaded by those recordings.
 
 ## Using your own voice
 

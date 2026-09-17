@@ -135,6 +135,7 @@ async function prepareKokoroNarration({
       duration,
       runtimeDuration: duration * pace,
       ...(cache ? { cacheHit: cache.cacheHit, cacheKey: cache.key } : {}),
+      ...(cache?.coverage ? { coverage: cache.coverage } : {}),
     });
   }
   return {

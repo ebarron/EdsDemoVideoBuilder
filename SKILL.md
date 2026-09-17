@@ -244,7 +244,10 @@ node scripts/demo.mjs kokoro-setup
 
 Kokoro configuration is documented in
 [references/narration.md](references/narration.md). Production creates one
-measured WAV per scene and caches it by text and synthesis settings. Preflight
+measured WAV per scene and caches it with source-coverage metadata. Tokenizer
+truncation must remain disabled; recursively split any exact token overflow.
+Final verification must match every narrated scene to complete token-safe
+coverage and reject unexplained silence inside its audio window. Preflight
 checks the isolated runtime only for Kokoro demos.
 
 The current JavaScript phonemizer uses GPL-licensed eSpeak-NG. Keep this a

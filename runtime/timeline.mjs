@@ -44,6 +44,7 @@ export class DemoTimeline {
       runtimeDuration: segment.runtimeDuration,
       file: segment.file,
       ...(anchor ? { anchor } : {}),
+      ...(segment.coverage ? { coverage: segment.coverage } : {}),
     };
     this.narrations.push(entry);
     return entry;

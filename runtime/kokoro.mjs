@@ -299,7 +299,9 @@ export function setupKokoroRuntime({
   };
 }
 
-export function splitKokoroText(text, maxCharacters = 700) {
+// Stay comfortably below Kokoro's tokenizer limit. Character count is only a
+// proxy for the normalized phoneme tokens, so exact token checks still follow.
+export function splitKokoroText(text, maxCharacters = 350) {
   const sentences = String(text)
     .match(/[^.!?]+(?:[.!?]+|$)/g)
     ?.map((entry) => entry.trim())
@@ -342,6 +344,172 @@ export function splitKokoroText(text, maxCharacters = 700) {
   }
   if (current) chunks.push(current);
   return chunks;
+}
+
+export const KOKORO_TOKEN_LIMIT = 512;
+
+export class KokoroTokenLimitError extends Error {
+  constructor(tokenCount) {
+    super(`Kokoro input has ${tokenCount} tokens; limit is ${KOKORO_TOKEN_LIMIT}`);
+    this.name = 'KokoroTokenLimitError';
+    this.code = 'KOKORO_TOKEN_LIMIT';
+    this.tokenCount = tokenCount;
+  }
+}
+
+function textDigest(text) {
+  return `sha256:${crypto.createHash('sha256').update(String(text)).digest('hex')}`;
+}
+
+function compactText(text) {
+  return String(text).replace(/\s+/g, '');
+}
+
+function nonWhitespaceLength(text) {
+  return compactText(text).length;
+}
+
+function splitKokoroRetryChunk(text) {
+  const value = String(text).trim();
+  const target = Math.floor(value.length / 2);
+  let split = -1;
+  for (let distance = 0; distance < value.length; distance += 1) {
+    for (const candidate of [target - distance, target + distance]) {
+      if (candidate > 0 && candidate < value.length && /\s/.test(value[candidate])) {
+        split = candidate;
+        break;
+      }
+    }
+    if (split >= 0) break;
+  }
+  if (split >= 0) {
+    return [value.slice(0, split).trim(), value.slice(split).trim()].filter(Boolean);
+  }
+  const characters = Array.from(value);
+  if (characters.length < 2) return [value];
+  const midpoint = Math.floor(characters.length / 2);
+  return [
+    characters.slice(0, midpoint).join(''),
+    characters.slice(midpoint).join(''),
+  ].filter(Boolean);
+}
+
+export async function generateKokoroChunks({
+  text,
+  generate,
+  initialMaxCharacters = 350,
+}) {
+  const source = String(text);
+  const initial = splitKokoroText(source, initialMaxCharacters);
+  if (!initial.length) throw new Error('Cannot synthesize empty Kokoro narration');
+  if (compactText(initial.join('')) !== compactText(source)) {
+    throw new Error('Kokoro initial chunking did not preserve the complete narration');
+  }
+  const chunks = [];
+  const visit = async (chunk, depth = 0) => {
+    try {
+      const result = await generate(chunk);
+      if (
+        !Number.isInteger(result?.tokenCount) ||
+        result.tokenCount < 1 ||
+        result.tokenCount > KOKORO_TOKEN_LIMIT
+      ) {
+        throw new Error('Kokoro generation did not report a safe token count');
+      }
+      chunks.push({ text: chunk, ...result });
+    } catch (error) {
+      if (error?.code !== 'KOKORO_TOKEN_LIMIT') throw error;
+      const parts = splitKokoroRetryChunk(chunk);
+      if (parts.length < 2 || depth >= 20) {
+        throw new Error(
+          `Kokoro narration cannot be split below its ${KOKORO_TOKEN_LIMIT}-token limit`,
+          { cause: error },
+        );
+      }
+      for (const part of parts) await visit(part, depth + 1);
+    }
+  };
+  for (const chunk of initial) await visit(chunk);
+  if (compactText(chunks.map((entry) => entry.text).join('')) !== compactText(source)) {
+    throw new Error('Kokoro recursive chunking did not preserve the complete narration');
+  }
+  let sourceOffset = 0;
+  const coverage = {
+    version: 1,
+    complete: true,
+    sourceHash: textDigest(source),
+    sourceCharacters: source.length,
+    sourceNonWhitespaceCharacters: nonWhitespaceLength(source),
+    sourceNonWhitespaceHash: textDigest(compactText(source)),
+    tokenLimit: KOKORO_TOKEN_LIMIT,
+    chunkCount: chunks.length,
+    maxTokenCount: Math.max(...chunks.map((entry) => entry.tokenCount)),
+    chunks: chunks.map((entry, index) => {
+      const compact = compactText(entry.text);
+      const start = sourceOffset;
+      sourceOffset += compact.length;
+      return {
+        index,
+        sourceStart: start,
+        sourceEnd: sourceOffset,
+        sourceHash: textDigest(compact),
+        characters: entry.text.length,
+        nonWhitespaceCharacters: compact.length,
+        tokenCount: entry.tokenCount,
+      };
+    }),
+  };
+  return { chunks, coverage };
+}
+
+export function assertKokoroCoverage(text, coverage) {
+  const source = compactText(text);
+  let expectedOffset = 0;
+  const chunkCharacters = Array.isArray(coverage?.chunks)
+    ? coverage.chunks.reduce(
+      (total, chunk, index) => {
+        const validRange =
+          Number.isInteger(chunk.nonWhitespaceCharacters) &&
+          chunk.nonWhitespaceCharacters > 0 &&
+          chunk.index === index &&
+          chunk.sourceStart === expectedOffset &&
+          chunk.sourceEnd === expectedOffset + chunk.nonWhitespaceCharacters &&
+          chunk.sourceHash === textDigest(source.slice(chunk.sourceStart, chunk.sourceEnd));
+        expectedOffset = chunk.sourceEnd;
+        return validRange ? total + chunk.nonWhitespaceCharacters : Number.NaN;
+      },
+      0,
+    )
+    : null;
+  if (
+    coverage?.version !== 1 ||
+    coverage.complete !== true ||
+    coverage.sourceHash !== textDigest(text) ||
+    coverage.sourceCharacters !== String(text).length ||
+    coverage.sourceNonWhitespaceCharacters !== nonWhitespaceLength(text) ||
+    coverage.sourceNonWhitespaceHash !== textDigest(source) ||
+    coverage.tokenLimit !== KOKORO_TOKEN_LIMIT ||
+    !Array.isArray(coverage.chunks) ||
+    coverage.chunks.length < 1 ||
+    coverage.chunkCount !== coverage.chunks?.length ||
+    !Number.isInteger(coverage.maxTokenCount) ||
+    coverage.maxTokenCount < 1 ||
+    coverage.maxTokenCount > KOKORO_TOKEN_LIMIT ||
+    coverage.maxTokenCount !== Math.max(
+      ...coverage.chunks.map((chunk) => chunk.tokenCount),
+    ) ||
+    chunkCharacters !== coverage.sourceNonWhitespaceCharacters ||
+    expectedOffset !== source.length ||
+    coverage.chunks.some(
+      (chunk) =>
+        !Number.isInteger(chunk.tokenCount) ||
+        chunk.tokenCount < 1 ||
+        chunk.tokenCount > KOKORO_TOKEN_LIMIT,
+    )
+  ) {
+    throw new Error('Kokoro narration lacks complete, token-safe synthesis coverage');
+  }
+  return coverage;
 }
 
 function concatWaveFiles(ffmpeg, inputs, output) {
@@ -486,25 +654,56 @@ async function loadProvider(settings, ffmpeg) {
         dtype: settings.dtype,
         device: settings.device,
       });
+      let observedTokenCount = null;
+      const tokenizer = tts.tokenizer;
+      tts.tokenizer = new Proxy(tokenizer, {
+        apply(target, thisArgument, argumentsList) {
+          const [phonemes, options = {}] = argumentsList;
+          const tokenized = Reflect.apply(target, thisArgument, [
+            phonemes,
+            { ...options, truncation: false },
+          ]);
+          const tokenCount = tokenized?.input_ids?.dims?.at(-1);
+          if (!Number.isInteger(tokenCount)) {
+            throw new Error('Kokoro tokenizer did not report its input length');
+          }
+          observedTokenCount = tokenCount;
+          if (tokenCount > KOKORO_TOKEN_LIMIT) {
+            throw new KokoroTokenLimitError(tokenCount);
+          }
+          return tokenized;
+        },
+      });
       return {
         async generateScene(text, output) {
-          const chunks = splitKokoroText(text);
-          if (!chunks.length) throw new Error('Cannot synthesize empty Kokoro narration');
           const temporary = fs.mkdtempSync(
             path.join(path.dirname(output), `.kokoro-${process.pid}-`),
           );
           try {
-            const files = [];
-            for (const [index, chunk] of chunks.entries()) {
-              const file = path.join(temporary, `${index}.wav`);
-              const audio = await tts.generate(chunk, {
-                voice: settings.voice,
-                speed: settings.speed,
-              });
-              await audio.save(file);
-              files.push(file);
-            }
-            concatWaveFiles(ffmpeg, files, output);
+            let fileIndex = 0;
+            const generated = await generateKokoroChunks({
+              text,
+              async generate(chunk) {
+                observedTokenCount = null;
+                const audio = await tts.generate(chunk, {
+                  voice: settings.voice,
+                  speed: settings.speed,
+                });
+                if (!Number.isInteger(observedTokenCount)) {
+                  throw new Error('Kokoro generation completed without token coverage');
+                }
+                const file = path.join(temporary, `${fileIndex}.wav`);
+                fileIndex += 1;
+                await audio.save(file);
+                return { file, tokenCount: observedTokenCount };
+              },
+            });
+            concatWaveFiles(
+              ffmpeg,
+              generated.chunks.map((chunk) => chunk.file),
+              output,
+            );
+            return { coverage: generated.coverage };
           } finally {
             fs.rmSync(temporary, { recursive: true, force: true });
           }
@@ -530,7 +729,7 @@ export function kokoroAudioCacheKey(text, settings) {
         path.join(KOKORO_RUNTIME_RESOURCES, 'package-lock.json'),
         'sha256',
       ),
-      audioFormatVersion: 1,
+      audioFormatVersion: 3,
       model: settings.model,
       modelRevision: KOKORO_MODEL_REVISION,
       voice: settings.voice,
@@ -551,24 +750,47 @@ export async function prepareKokoroScene({
   const key = kokoroAudioCacheKey(text, settings);
   const cacheDirectory = path.join(settings.cacheDir, 'audio');
   const cached = path.join(cacheDirectory, `${key}.wav`);
+  const cachedCoverage = path.join(cacheDirectory, `${key}.coverage.json`);
   fs.mkdirSync(cacheDirectory, { recursive: true, mode: 0o700 });
   fs.mkdirSync(path.dirname(output), { recursive: true, mode: 0o700 });
-  let cacheHit = fs.existsSync(cached);
+  let coverage = null;
+  let cacheHit = fs.existsSync(cached) && fs.existsSync(cachedCoverage);
+  if (cacheHit) {
+    try {
+      coverage = assertKokoroCoverage(
+        text,
+        JSON.parse(fs.readFileSync(cachedCoverage, 'utf8')),
+      );
+    } catch {
+      cacheHit = false;
+      coverage = null;
+    }
+  }
   if (!cacheHit) {
     const temporary = `${cached}.tmp-${process.pid}-${Date.now()}.wav`;
+    const temporaryCoverage =
+      `${cachedCoverage}.tmp-${process.pid}-${Date.now()}`;
     const activeProvider = provider ?? await loadProvider(settings, ffmpeg);
     try {
-      await activeProvider.generateScene(text, temporary);
+      const generated = await activeProvider.generateScene(text, temporary);
       if (!fs.existsSync(temporary) || fs.statSync(temporary).size === 0) {
         throw new Error('Kokoro generated an empty narration clip');
       }
+      coverage = assertKokoroCoverage(text, generated?.coverage);
+      fs.writeFileSync(
+        temporaryCoverage,
+        `${JSON.stringify(coverage, null, 2)}\n`,
+        { mode: 0o600 },
+      );
       fs.renameSync(temporary, cached);
+      fs.renameSync(temporaryCoverage, cachedCoverage);
     } catch (error) {
       fs.rmSync(temporary, { force: true });
+      fs.rmSync(temporaryCoverage, { force: true });
       throw error;
     }
     cacheHit = false;
   }
   fs.copyFileSync(cached, output);
-  return { output, cached, cacheHit, key };
+  return { output, cached, cacheHit, key, coverage };
 }

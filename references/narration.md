@@ -74,8 +74,12 @@ The default `q8` model is roughly 92 MB. Supported American and British voices
 include `af_heart`, `af_bella`, `af_nicole`, `am_fenrir`, `am_michael`,
 `bf_emma`, `bf_isabella`, `bm_fable`, and `bm_george`. `speed` ranges from
 `0.5` through `2`; `1` is unchanged speed. Long scenes are split at sentence
-boundaries before synthesis to avoid the model's token limit, then assembled
-into one measured WAV per scene.
+boundaries before synthesis. Truncation is disabled at the tokenizer itself;
+any chunk that still exceeds the exact 512-token limit is recursively split
+and retried. Each cached clip includes coverage metadata tying every safe chunk
+back to the complete source narration, then the chunks are assembled into one
+measured WAV per scene. Final verification rejects missing or stale coverage
+metadata and unexplained silence within a Kokoro narration window.
 
 Kokoro model weights are Apache-2.0. The current JavaScript phonemizer uses
 eSpeak-NG, which carries GPL obligations. The installer downloads that runtime

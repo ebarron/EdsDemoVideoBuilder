@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 
 import { resolveFfmpeg } from './ffmpeg.mjs';
+import { assertKokoroCoverage } from './kokoro.mjs';
 
 function probe(ffmpeg, file) {
   const result = spawnSync(ffmpeg, ['-hide_banner', '-i', file], { encoding: 'utf8' });
@@ -53,6 +54,103 @@ function frameHash(ffmpeg, file, second) {
   return result.stdout.trim();
 }
 
+function detectSilences(ffmpeg, file, duration) {
+  const result = spawnSync(ffmpeg, [
+    '-v', 'info',
+    '-i', file,
+    '-map', '0:a:0',
+    '-af', 'silencedetect=noise=-50dB:d=0.5',
+    '-f', 'null',
+    '-',
+  ], { encoding: 'utf8', timeout: 10 * 60_000 });
+  if (result.error?.code === 'ETIMEDOUT') {
+    throw new Error('Narration silence validation timed out');
+  }
+  if (result.status !== 0) {
+    throw new Error(`Narration silence validation failed:\n${result.stderr}`);
+  }
+  const intervals = [];
+  let start = null;
+  for (const match of result.stderr.matchAll(/silence_(start|end):\s*([\d.]+)/g)) {
+    const at = Number(match[2]);
+    if (match[1] === 'start') {
+      start = at;
+    } else if (start !== null) {
+      intervals.push({ start, end: at });
+      start = null;
+    }
+  }
+  if (start !== null) intervals.push({ start, end: duration });
+  return intervals;
+}
+
+function longestOverlap(start, end, intervals) {
+  return intervals.reduce(
+    (longest, interval) =>
+      Math.max(longest, Math.max(0, Math.min(end, interval.end) - Math.max(start, interval.start))),
+    0,
+  );
+}
+
+export function validateKokoroNarrationCoverage(timeline, scenePlan, silences = []) {
+  const expected = scenePlan.scenes.filter((scene) => scene.narration);
+  const entries = new Map();
+  for (const entry of timeline.narrations) {
+    if (entries.has(entry.id)) {
+      throw new Error(`Kokoro narration scene ${entry.id} appears more than once`);
+    }
+    entries.set(entry.id, entry);
+  }
+  const scenes = [];
+  for (const scene of expected) {
+    const entry = entries.get(scene.id);
+    if (!entry) throw new Error(`Kokoro narration coverage is missing scene ${scene.id}`);
+    const coverage = entry.coverage;
+    try {
+      assertKokoroCoverage(scene.narration, coverage);
+    } catch {
+      throw new Error(
+        `Kokoro narration scene ${scene.id} lacks complete, token-safe synthesis coverage`,
+      );
+    }
+    const chunks = coverage.chunks;
+    if (!(entry.duration > 0) || !(entry.finalStart >= 0)) {
+      throw new Error(`Kokoro narration scene ${scene.id} has an invalid final audio window`);
+    }
+    if (entry.finalStart + entry.duration > timeline.meta.finalDuration + 0.1) {
+      throw new Error(`Kokoro narration scene ${scene.id} extends beyond the final video`);
+    }
+    const availableDuration = Math.max(
+      0,
+      Math.min(entry.duration, timeline.meta.finalDuration - entry.finalStart),
+    );
+    if (!(availableDuration > 0)) {
+      throw new Error(`Kokoro narration scene ${scene.id} falls outside the final video`);
+    }
+    const longestSilence = longestOverlap(
+      entry.finalStart,
+      entry.finalStart + availableDuration,
+      silences,
+    );
+    if (
+      longestSilence >= availableDuration - 0.1 ||
+      longestSilence > Math.max(5, availableDuration * 0.4)
+    ) {
+      throw new Error(
+        `Kokoro narration scene ${scene.id} contains ${longestSilence.toFixed(1)}s ` +
+        'of unexplained silence',
+      );
+    }
+    scenes.push({
+      id: scene.id,
+      chunks: chunks.length,
+      maxTokenCount: coverage.maxTokenCount,
+      longestSilence,
+    });
+  }
+  return { complete: true, scenes };
+}
+
 export function verifyRecording(manifest, environment = process.env) {
   const file = manifest.output.video;
   if (!fs.existsSync(file)) throw new Error(`Final video does not exist: ${file}`);
@@ -74,6 +172,7 @@ export function verifyRecording(manifest, environment = process.env) {
   if (metadata.audio.sampleRate !== 48000) throw new Error('Audio is not 48 kHz');
   if (!(metadata.duration > 0)) throw new Error('Video has no duration');
   assertFastStart(file);
+  const timeline = JSON.parse(fs.readFileSync(manifest.output.timeline, 'utf8'));
 
   const decode = spawnSync(ffmpeg, [
     '-v', 'error',
@@ -86,9 +185,23 @@ export function verifyRecording(manifest, environment = process.env) {
   if (decode.error?.code === 'ETIMEDOUT') throw new Error('Full decode validation timed out');
   if (decode.status !== 0) throw new Error(`Full decode failed:\n${decode.stderr}`);
 
+  let narrationCoverage = null;
+  if (timeline.meta?.narration?.mode === 'kokoro') {
+    const scenePlan = JSON.parse(fs.readFileSync(manifest.scenePlan, 'utf8'));
+    const silences = detectSilences(ffmpeg, file, metadata.duration);
+    narrationCoverage = validateKokoroNarrationCoverage(timeline, scenePlan, silences);
+  }
+
   const fractions = metadata.duration < 2 ? [0.1, 0.5, 0.9] : [0.1, 0.5, 0.9];
   const hashes = fractions.map((fraction) =>
     frameHash(ffmpeg, file, Math.max(0, metadata.duration * fraction - 0.04)));
   if (new Set(hashes).size < 2) throw new Error('Progressive-frame checks found no visible change');
-  return { file, ...metadata, fastStart: true, fullDecode: true, progressiveFrames: hashes };
+  return {
+    file,
+    ...metadata,
+    fastStart: true,
+    fullDecode: true,
+    progressiveFrames: hashes,
+    ...(narrationCoverage ? { narrationCoverage } : {}),
+  };
 }
