@@ -48,6 +48,10 @@ The video is always muted; the synthetic voice is not played.
 - **Record full take** starts at the beginning and scrolls the teleprompter as
   the locked video plays.
 - **Record selected scene** seeks to one scene for a punch-in retake.
+- Recording controls, microphone selection, level meter, and status remain
+  pinned while the scene and take lists scroll.
+- A selected-scene recording pins that scene's prompt through the initial seek
+  boundary, so it never begins on the prior scene's text.
 - Choose the desired microphone after granting access; the live meter follows
   the selected input.
 - Every take is retained without changing the accepted selection. Use

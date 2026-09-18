@@ -18,6 +18,7 @@ export function voiceoverStudioHtml(token) {
     .next { color: #9da6b8; margin-top: 16px; font-size: 15px; }
     aside { border-left: 1px solid #252b38; background: #11141b; padding: 22px; overflow: auto; max-height: 100vh; }
     h2 { margin: 0 0 14px; font-size: 20px; }
+    .studio-toolbar { position: sticky; top: -22px; z-index: 5; margin: -22px -22px 0; padding: 22px 22px 10px; background: #11141bf5; border-bottom: 1px solid #252b38; box-shadow: 0 10px 18px #080a0e99; backdrop-filter: blur(8px); }
     button { border: 0; border-radius: 8px; padding: 11px 14px; font-weight: 700; cursor: pointer; background: #2d68d8; color: white; }
     button.secondary { background: #293041; }
     button.danger { background: #9e3040; }
@@ -56,17 +57,19 @@ export function voiceoverStudioHtml(token) {
       </div>
     </section>
     <aside>
-      <h2>Voiceover studio</h2>
-      <div class="controls">
-        <button id="record-master">Record full take</button>
-        <button id="record-scene" class="secondary">Record selected scene</button>
-        <button id="stop" class="danger" disabled>Stop</button>
+      <div class="studio-toolbar">
+        <h2>Voiceover studio</h2>
+        <div class="controls">
+          <button id="record-master">Record full take</button>
+          <button id="record-scene" class="secondary">Record selected scene</button>
+          <button id="stop" class="danger" disabled>Stop</button>
+        </div>
+        <label for="microphone">Microphone
+          <select id="microphone"><option value="">System default</option></select>
+        </label>
+        <div class="meter"><div id="meter-value"></div></div>
+        <div class="status" id="status">The video is always muted. Allow microphone access when prompted.</div>
       </div>
-      <label for="microphone">Microphone
-        <select id="microphone"><option value="">System default</option></select>
-      </label>
-      <div class="meter"><div id="meter-value"></div></div>
-      <div class="status" id="status">The video is always muted. Allow microphone access when prompted.</div>
       <div id="master"></div>
       <h2>Scenes</h2>
       <div id="scenes"></div>
@@ -92,6 +95,7 @@ export function voiceoverStudioHtml(token) {
     const takePlayer = document.getElementById('take-player');
     let session;
     let selectedScene;
+    let pinnedPromptScene;
     let playingTakeId = null;
     let stream;
     let audioContext;
@@ -256,6 +260,7 @@ export function voiceoverStudioHtml(token) {
           if (preparing || recording || uploading) return;
           stopTakePlayback();
           selectedScene = button.dataset.scene;
+          pinnedPromptScene = selectedScene;
           const prompt = session.prompts.find((entry) => entry.sceneId === selectedScene);
           video.currentTime = prompt.start;
           render();
@@ -343,7 +348,29 @@ export function voiceoverStudioHtml(token) {
     function updatePrompt() {
       if (!session) return;
       const time = video.currentTime;
-      let index = session.prompts.findIndex((prompt) => time >= prompt.start && time < prompt.end);
+      let index = -1;
+      if (pinnedPromptScene) {
+        const pinnedIndex = session.prompts.findIndex(
+          (prompt) => prompt.sceneId === pinnedPromptScene,
+        );
+        const pinned = session.prompts[pinnedIndex];
+        if (
+          pinned &&
+          (
+            video.paused ||
+            (time >= pinned.start - 0.5 && time < Math.min(pinned.start + 0.25, pinned.end))
+          )
+        ) {
+          index = pinnedIndex;
+        } else {
+          pinnedPromptScene = null;
+        }
+      }
+      if (index < 0) {
+        index = session.prompts.findIndex(
+          (prompt) => time >= prompt.start && time < prompt.end,
+        );
+      }
       if (index < 0) index = session.prompts.findIndex((prompt) => prompt.start > time);
       if (index < 0) index = session.prompts.length - 1;
       const prompt = session.prompts[index];
@@ -439,6 +466,7 @@ export function voiceoverStudioHtml(token) {
       if (kind === 'scene' && !prompt) return;
       try {
         stopTakePlayback();
+        pinnedPromptScene = kind === 'scene' ? prompt.sceneId : null;
         preparing = true;
         recordMaster.disabled = true;
         recordScene.disabled = true;
@@ -446,6 +474,7 @@ export function voiceoverStudioHtml(token) {
         await ensureMicrophone();
         video.pause();
         video.currentTime = kind === 'master' ? 0 : prompt.start;
+        updatePrompt();
         await new Promise((resolve) => {
           if (video.readyState >= 1) resolve();
           else video.addEventListener('loadedmetadata', resolve, { once: true });

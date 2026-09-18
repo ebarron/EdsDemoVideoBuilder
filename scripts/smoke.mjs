@@ -37,6 +37,26 @@ assert.equal(
   0,
   `Package-local FFmpeg failed:\n${ffmpegVersion.stderr || ffmpegVersion.stdout}`,
 );
+const smokeVideo = spawnSync(ffmpeg, [
+  '-v', 'error',
+  '-f', 'lavfi',
+  '-i', 'color=c=black:s=320x180:r=25:d=3',
+  '-an',
+  '-c:v', 'libx264',
+  '-pix_fmt', 'yuv420p',
+  '-movflags', 'frag_keyframe+empty_moov',
+  '-f', 'mp4',
+  '-',
+], { timeout: 60_000 });
+assert.equal(smokeVideo.status, 0, `Could not create smoke video:\n${smokeVideo.stderr}`);
+const smokePrompts = Array.from({ length: 24 }, (_, index) => ({
+  sceneId: `scene-${index}`,
+  title: index === 0 ? 'Intro' : index === 1 ? 'Storage' : `Scene ${index + 1}`,
+  text: index === 0 ? 'Introduce the demo.' : `Narration for scene ${index + 1}.`,
+  start: index,
+  end: index + 1,
+  windowDuration: 1,
+}));
 
 let browser;
 try {
@@ -97,20 +117,13 @@ try {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
-          pictureLock: { finalDuration: 2 },
-          prompts: [{
-            sceneId: 'intro',
-            title: 'Intro',
-            text: 'Introduce the demo.',
-            start: 0,
-            end: 2,
-            windowDuration: 2,
-          }],
+          pictureLock: { finalDuration: 24 },
+          prompts: smokePrompts,
           takes: [{
             id: 'intro-take',
             kind: 'scene',
-            sceneId: 'intro',
-            effectiveDuration: 1.5,
+            sceneId: 'scene-0',
+            effectiveDuration: 0.8,
             fit: { status: 'fits' },
           }],
           accepted: { master: null, scenes: {} },
@@ -118,6 +131,8 @@ try {
       });
     } else if (url.pathname === '/api/take-audio') {
       await route.fulfill({ contentType: 'audio/wav', body: waveBuffer() });
+    } else if (url.pathname === '/video') {
+      await route.fulfill({ contentType: 'video/mp4', body: smokeVideo.stdout });
     } else {
       await route.fulfill({ status: 404, body: '' });
     }
@@ -139,6 +154,23 @@ try {
   assert.equal(await stopLatest.isEnabled(), true);
   await stopLatest.click();
   assert.equal(await stopLatest.isDisabled(), true);
+  const toolbar = page.locator('.studio-toolbar');
+  assert.equal(await toolbar.evaluate((element) => getComputedStyle(element).position), 'sticky');
+  await page.locator('aside').evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  assert.equal(await page.getByRole('button', { name: 'Record full take' }).isVisible(), true);
+  await page.locator('video').evaluate((element) => new Promise((resolve) => {
+    if (element.readyState >= 1) resolve();
+    else element.addEventListener('loadedmetadata', resolve, { once: true });
+  }));
+  await page.locator('[data-scene="scene-1"]').click();
+  await page.locator('video').evaluate((element) => {
+    element.currentTime = 0.95;
+    element.dispatchEvent(new Event('timeupdate'));
+  });
+  assert.equal(await page.locator('#prompt-title').textContent(), 'Storage');
+  assert.equal(await page.locator('#prompt-text').textContent(), 'Narration for scene 2.');
   assert.deepEqual(pageErrors, []);
 } finally {
   await browser?.close();

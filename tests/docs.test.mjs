@@ -80,6 +80,8 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Do not require the user to name a command, manifest, or workflow/,
     /finish and verify the separate\s+human-voice output automatically/,
     /studio must play the locked video muted/,
+    /recording controls, microphone, meter, and status pinned/,
+    /pin that scene's teleprompter\s+text across the initial media seek/,
     /Show Play and Stop directly\s+on every recorded scene row/,
     /beside every take in\s+history/,
     /require an explicit Use action/,

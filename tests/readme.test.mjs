@@ -74,6 +74,8 @@ test('README links resolve and prompt states safety gates', () => {
     /Play\/Stop\s+controls directly on recorded scene rows/,
     /Take history provides the same controls/,
     /Recording\s+a take does not replace the accepted selection/,
+    /recording toolbar stays pinned/,
+    /selected-scene recording pins the correct prompt/,
     /node scripts\/demo\.mjs voiceover-finish/,
     /Human output uses `-human` filenames and never overwrites the\s+synthetic version/,
     /gh repo clone ebarron\/EdsDemoVideoBuilder "\$HOME\/\.cursor\/skills\/demo-video-builder"/,

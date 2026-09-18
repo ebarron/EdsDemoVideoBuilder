@@ -317,6 +317,9 @@ node scripts/demo.mjs voiceover --manifest path/to/demo.yaml
 The studio must play the locked video muted, show the current and next spoken
 cues, request microphone permission in the local browser, and retain every full
 or scene-level take. It normalizes accepted recordings to 48 kHz mono WAV.
+Keep the recording controls, microphone, meter, and status pinned while its
+lists scroll. When recording a selected scene, pin that scene's teleprompter
+text across the initial media seek so the prior prompt never flashes first.
 Recording must not replace an accepted selection. Show Play and Stop directly
 on every recorded scene row for its latest take and beside every take in
 history, then require an explicit Use action to accept it. Overlong takes
