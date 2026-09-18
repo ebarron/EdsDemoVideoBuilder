@@ -33,8 +33,11 @@ export function voiceoverStudioHtml(token) {
     .scene { width: 100%; text-align: left; background: #1b202b; margin: 0; border: 1px solid transparent; }
     .scene.selected { border-color: #6da0ff; background: #202b40; }
     .scene small { display: block; color: #9ba5b8; margin-top: 4px; }
-    .scene-audition { display: flex; gap: 5px; }
+    .scene-audition { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
     .scene-audition button { padding: 7px 9px; font-size: 11px; }
+    .scene-group { border-bottom: 1px solid #1f2430; }
+    .take-history { margin: -2px 0 8px; padding: 0 8px 4px; }
+    .take-history summary { color: #9ba5b8; cursor: pointer; font-size: 12px; padding: 5px 0; }
     .take { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid #252b38; font-size: 12px; }
     .take > span:first-child { flex: 1; min-width: 120px; }
     .take-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
@@ -63,6 +66,7 @@ export function voiceoverStudioHtml(token) {
           <button id="record-master">Record full take</button>
           <button id="record-scene" class="secondary">Record selected scene</button>
           <button id="stop" class="danger" disabled>Stop</button>
+          <button id="use-latest" class="secondary">Use latest eligible takes</button>
         </div>
         <label for="microphone">Microphone
           <select id="microphone"><option value="">System default</option></select>
@@ -70,12 +74,10 @@ export function voiceoverStudioHtml(token) {
         <div class="meter"><div id="meter-value"></div></div>
         <div class="status" id="status">The video is always muted. Allow microphone access when prompted.</div>
       </div>
+      <audio id="take-player" preload="none"></audio>
       <div id="master"></div>
       <h2>Scenes</h2>
       <div id="scenes"></div>
-      <h2>Take history</h2>
-      <audio id="take-player" preload="none"></audio>
-      <div id="takes"></div>
       <div class="controls" style="margin-top: 18px">
         <button id="complete" class="secondary">Save and close studio</button>
       </div>
@@ -88,6 +90,7 @@ export function voiceoverStudioHtml(token) {
     const video = document.getElementById('video');
     const status = document.getElementById('status');
     const stopButton = document.getElementById('stop');
+    const useLatest = document.getElementById('use-latest');
     const recordMaster = document.getElementById('record-master');
     const recordScene = document.getElementById('record-scene');
     const microphone = document.getElementById('microphone');
@@ -160,8 +163,23 @@ export function voiceoverStudioHtml(token) {
       updatePrompt();
     }
 
+    function latestEligibleChanges() {
+      return session.prompts.map((prompt) => {
+        const take = [...session.takes].reverse().find(
+          (entry) =>
+            entry.kind === 'scene' &&
+            entry.sceneId === prompt.sceneId &&
+            entry.fit.status !== 'over',
+        );
+        return take && session.accepted.scenes[prompt.sceneId] !== take.id
+          ? { prompt, take }
+          : null;
+      }).filter(Boolean);
+    }
+
     function syncTakePlaybackButtons() {
       const busy = Boolean(preparing || recording || uploading);
+      useLatest.disabled = busy || latestEligibleChanges().length === 0;
       for (const button of document.querySelectorAll('[data-play-take]')) {
         button.disabled =
           busy ||
@@ -216,17 +234,27 @@ export function voiceoverStudioHtml(token) {
 
     function render() {
       const master = session.takes.find((take) => take.id === session.accepted.master);
-      document.getElementById('master').innerHTML = master
+      const masterTakes = [...session.takes]
+        .reverse()
+        .filter((take) => take.kind === 'master');
+      const masterHistory = masterTakes.length
+        ? '<details class="take-history"><summary>Full-take history (' +
+          masterTakes.length + ')</summary>' +
+          masterTakes.map((take) => renderTake(take)).join('') + '</details>'
+        : '';
+      document.getElementById('master').innerHTML = (master
         ? '<p>Accepted full take <span class="pill ' + master.fit.status + '">' +
           master.fit.status + ' · ' + master.effectiveDuration.toFixed(1) +
           's</span> <button class="secondary" data-clear-master>Clear full take</button></p>'
-        : '<p>No full take accepted. Record one full take, or record every scene.</p>';
+        : '<p>No full take accepted. Record one full take, or record every scene.</p>') +
+        masterHistory;
       document.getElementById('scenes').innerHTML = session.prompts.map((prompt) => {
-        const acceptedTakeId = session.accepted.scenes[prompt.sceneId];
-        const acceptedTake = session.takes.find((candidate) => candidate.id === acceptedTakeId);
-        const latestTake = [...session.takes].reverse().find(
+        const sceneTakes = [...session.takes].reverse().filter(
           (candidate) => candidate.kind === 'scene' && candidate.sceneId === prompt.sceneId,
         );
+        const acceptedTakeId = session.accepted.scenes[prompt.sceneId];
+        const acceptedTake = session.takes.find((candidate) => candidate.id === acceptedTakeId);
+        const latestTake = sceneTakes[0];
         const reviewTake = latestTake ?? acceptedTake;
         let fit = '<span class="pill">not recorded</span>';
         if (acceptedTake) {
@@ -247,13 +275,24 @@ export function voiceoverStudioHtml(token) {
             '" aria-label="Play latest take for ' + escapeHtml(prompt.title) + '">Play</button>' +
             '<button class="secondary" data-stop-take="' + escapeHtml(reviewTake.id) +
             '" aria-label="Stop latest take for ' + escapeHtml(prompt.title) +
-            '" disabled>Stop</button></span>'
+            '" disabled>Stop</button>' +
+            '<button class="secondary" data-take="' + escapeHtml(reviewTake.id) + '"' +
+            (reviewTake.fit.status === 'over' || reviewTake.id === acceptedTakeId
+              ? ' disabled'
+              : '') + '>' +
+            (reviewTake.id === acceptedTakeId ? 'In use' : 'Use') +
+            '</button></span>'
           : '';
-        return '<div class="scene-row"><button class="scene ' +
+        const history = sceneTakes.length
+          ? '<details class="take-history"><summary>Take history (' +
+            sceneTakes.length + ')</summary>' +
+            sceneTakes.map((take) => renderTake(take)).join('') + '</details>'
+          : '';
+        return '<div class="scene-group"><div class="scene-row"><button class="scene ' +
           (prompt.sceneId === selectedScene ? 'selected' : '') +
           '" data-scene="' + escapeHtml(prompt.sceneId) + '"><strong>' + escapeHtml(prompt.title) +
           '</strong>' + fit + '<small>' + format(prompt.start) + '–' + format(prompt.end) +
-          '</small></button>' + controls + '</div>';
+          '</small></button>' + controls + '</div>' + history + '</div>';
       }).join('');
       for (const button of document.querySelectorAll('[data-scene]')) {
         button.addEventListener('click', () => {
@@ -267,26 +306,6 @@ export function voiceoverStudioHtml(token) {
           updatePrompt();
         });
       }
-      document.getElementById('takes').innerHTML = [...session.takes].reverse().map((take) => {
-        const accepted = take.kind === 'master'
-          ? session.accepted.master === take.id
-          : session.accepted.scenes[take.sceneId] === take.id;
-        const takeId = escapeHtml(take.id);
-        return '<div class="take"><span>' +
-          escapeHtml(take.kind === 'master' ? 'Full take' : take.sceneId) +
-          ' · ' + take.effectiveDuration.toFixed(1) + 's · ' + escapeHtml(take.fit.status) +
-          (accepted ? '<span class="pill">in use</span>' : '') +
-          '</span><span class="take-actions">' +
-          '<button class="secondary" data-play-take="' + takeId + '">Play</button>' +
-          '<button class="secondary" data-stop-take="' + takeId + '" disabled>Stop</button>' +
-          '<button class="secondary" data-take="' + takeId + '"' +
-          (take.fit.status === 'over' || accepted ? ' disabled' : '') +
-          '>' + (accepted ? 'In use' : 'Use') + '</button>' +
-          (take.kind === 'scene' && accepted
-            ? '<button class="secondary" data-clear-scene="' + escapeHtml(take.sceneId) +
-              '">Clear scene override</button>'
-            : '') + '</span></div>';
-      }).join('') || '<p>No takes yet.</p>';
       for (const button of document.querySelectorAll('[data-play-take]')) {
         button.addEventListener('click', () => {
           playTake(button.dataset.playTake).catch((error) => {
@@ -333,10 +352,30 @@ export function voiceoverStudioHtml(token) {
           await refresh();
         });
       }
-      for (const button of document.querySelectorAll('#scenes button, #takes button, #master button')) {
+      for (const button of document.querySelectorAll('#scenes button, #master button')) {
         button.disabled ||= Boolean(preparing || recording || uploading);
       }
       syncTakePlaybackButtons();
+    }
+
+    function renderTake(take) {
+      const accepted = take.kind === 'master'
+        ? session.accepted.master === take.id
+        : session.accepted.scenes[take.sceneId] === take.id;
+      const takeId = escapeHtml(take.id);
+      return '<div class="take"><span>' +
+        take.effectiveDuration.toFixed(1) + 's · ' + escapeHtml(take.fit.status) +
+        (accepted ? '<span class="pill">in use</span>' : '') +
+        '</span><span class="take-actions">' +
+        '<button class="secondary" data-play-take="' + takeId + '">Play</button>' +
+        '<button class="secondary" data-stop-take="' + takeId + '" disabled>Stop</button>' +
+        '<button class="secondary" data-take="' + takeId + '"' +
+        (take.fit.status === 'over' || accepted ? ' disabled' : '') +
+        '>' + (accepted ? 'In use' : 'Use') + '</button>' +
+        (take.kind === 'scene' && accepted
+          ? '<button class="secondary" data-clear-scene="' + escapeHtml(take.sceneId) +
+            '">Clear</button>'
+          : '') + '</span></div>';
     }
 
     function escapeHtml(value) {
@@ -471,6 +510,7 @@ export function voiceoverStudioHtml(token) {
         recordMaster.disabled = true;
         recordScene.disabled = true;
         microphone.disabled = true;
+        syncTakePlaybackButtons();
         await ensureMicrophone();
         video.pause();
         video.currentTime = kind === 'master' ? 0 : prompt.start;
@@ -507,6 +547,7 @@ export function voiceoverStudioHtml(token) {
         recording.videoOffsetMs = performance.now() - recordingStarted;
         recorder.addEventListener('stop', uploadRecording, { once: true });
         preparing = false;
+        syncTakePlaybackButtons();
         stopButton.disabled = false;
         status.textContent = kind === 'master'
           ? 'Recording full narration. The guide audio is muted.'
@@ -527,6 +568,7 @@ export function voiceoverStudioHtml(token) {
         microphone.disabled = false;
         recordMaster.disabled = false;
         recordScene.disabled = false;
+        syncTakePlaybackButtons();
         throw new Error(
           'Locked video could not start; microphone take was discarded: ' + error.message,
         );
@@ -610,6 +652,32 @@ export function voiceoverStudioHtml(token) {
     recordScene.addEventListener('click', () => beginRecording('scene').catch((error) => {
       status.textContent = error.message;
     }));
+    useLatest.addEventListener('click', async () => {
+      if (preparing || recording || uploading) return;
+      const changes = latestEligibleChanges();
+      if (!changes.length) {
+        status.textContent = 'Every scene already uses its latest eligible take.';
+        return;
+      }
+      if (!window.confirm(
+        'Use the latest eligible take for ' + changes.length +
+        ' scene' + (changes.length === 1 ? '' : 's') + '?',
+      )) return;
+      stopTakePlayback();
+      useLatest.disabled = true;
+      try {
+        const response = await fetch(withToken('/api/accept-latest'), { method: 'POST' });
+        if (!response.ok) throw new Error(await response.text());
+        const result = await response.json();
+        await refresh();
+        status.textContent =
+          'Accepted the latest eligible take for ' + result.accepted.length +
+          ' scene' + (result.accepted.length === 1 ? '' : 's') + '.';
+      } catch (error) {
+        status.textContent = 'Could not use latest takes: ' + error.message;
+        syncTakePlaybackButtons();
+      }
+    });
     stopButton.addEventListener('click', stopRecording);
     microphone.addEventListener('change', () => {
       if (preparing || recording || uploading || microphonePromise) return;

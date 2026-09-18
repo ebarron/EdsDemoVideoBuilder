@@ -148,6 +148,12 @@ try {
   const playLatest = page.getByRole('button', { name: 'Play latest take for Intro' });
   const stopLatest = page.getByRole('button', { name: 'Stop latest take for Intro' });
   assert.equal(await playLatest.isVisible(), true);
+  assert.equal(
+    await page.getByRole('button', { name: 'Use latest eligible takes' }).isEnabled(),
+    true,
+  );
+  assert.equal(await page.getByRole('heading', { name: 'Take history' }).count(), 0);
+  assert.equal(await page.getByText('Take history (1)').isVisible(), true);
   await playLatest.click();
   await page.waitForFunction(() =>
     !document.querySelector('[aria-label="Stop latest take for Intro"]').disabled);

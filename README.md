@@ -274,12 +274,13 @@ audio plays. It supports a
 continuous full take and scene-level punch-in retakes, normalizes microphone
 recordings to 48 kHz mono WAV, retains take history, and provides Play/Stop
 controls directly on recorded scene rows for auditioning the latest take.
-Take history provides the same controls for every prior take before explicitly
-choosing Use. Recording a take does not replace the accepted selection.
-Overlong speech requires a natural retake; it can be auditioned but cannot be
-used or automatically sped up. The recording toolbar stays pinned while long
-scene lists scroll, and selected-scene recording pins the correct prompt across
-its initial video seek.
+Each scene folds its prior takes into a collapsed local history, while full
+takes stay grouped by the master area. An explicit Use latest eligible takes
+action bulk-selects the newest fitting scene takes. Recording itself does not
+replace accepted selections. Overlong speech requires a natural retake; it can
+be auditioned but cannot be used or automatically sped up. The recording
+toolbar stays pinned while long scene lists scroll, and selected-scene
+recording pins the correct prompt across its initial video seek.
 
 Starting the studio creates an immutable picture-lock package, including the
 approved video, timeline, script, scene plan, contact sheet, and raw take when

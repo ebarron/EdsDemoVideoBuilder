@@ -322,9 +322,12 @@ lists scroll. When recording a selected scene, pin that scene's teleprompter
 text across the initial media seek so the prior prompt never flashes first.
 Recording must not replace an accepted selection. Show Play and Stop directly
 on every recorded scene row for its latest take and beside every take in
-history, then require an explicit Use action to accept it. Overlong takes
-remain playable but require a natural retake; never accept them or speed up
-human speech or browser motion.
+that scene's collapsed history, then require an explicit Use action to accept
+it. Keep full-take history beside the master area; never build one global take
+list. Offer an explicit, reversible Use latest eligible takes bulk action that
+skips overlong takes rather than automatically accepting during recording.
+Overlong takes remain playable but require a natural retake; never accept them
+or speed up human speech or browser motion.
 
 After the user saves and closes the studio, finish and verify the separate
 human-voice output automatically unless they asked only to capture takes:

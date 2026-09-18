@@ -56,8 +56,12 @@ The video is always muted; the synthetic voice is not played.
   the selected input.
 - Every take is retained without changing the accepted selection. Use
   **Play** and **Stop** directly on a recorded scene row to audition its latest
-  take. The same controls appear in take history for every prior take; choose
-  **Use** only after approving what you heard.
+  take, then choose **Use** only after approving what you heard. Each scene
+  contains a collapsed history for its prior takes; full-take history stays
+  beside the master area instead of forming one long global list.
+- **Use latest eligible takes** explicitly selects the newest non-overlong take
+  for every recorded scene. It is a reversible bulk action, not automatic
+  acceptance during recording.
 - Overlong takes can be auditioned but cannot be selected. Use a previous take
   from history to restore it, or clear a scene override to return to the full
   take.

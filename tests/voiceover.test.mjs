@@ -9,7 +9,7 @@ import ffmpegStatic from 'ffmpeg-static';
 
 import { createVoiceoverStudio } from '../runtime/voiceover-studio.mjs';
 import {
-  acceptVoiceoverTake,
+  acceptLatestEligibleVoiceoverTakes,
   buildVoiceoverAudioGraph,
   buildVoiceoverPrompts,
   createVoiceoverSession,
@@ -253,8 +253,14 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
     contentType: 'audio/wav',
     bytes: waveBuffer(0.4),
   });
-  acceptVoiceoverTake(files.manifest, opening.take.id);
-  acceptVoiceoverTake(files.manifest, close.take.id);
+  const latest = acceptLatestEligibleVoiceoverTakes(files.manifest);
+  assert.deepEqual(
+    latest.accepted,
+    [
+      { sceneId: 'opening', takeId: opening.take.id },
+      { sceneId: 'close', takeId: close.take.id },
+    ],
+  );
   const result = finishVoiceover(files.manifest, { stdio: 'pipe' });
   assert.equal(fs.existsSync(result.video), true);
   assert.notEqual(result.video, files.manifest.output.video);
@@ -279,6 +285,8 @@ test('serves the muted studio and take audio only through its local token', asyn
   assert.match(html, /The video is always muted/);
   assert.match(html, /data-play-take/);
   assert.match(html, /data-stop-take/);
+  assert.match(html, /Use latest eligible takes/);
+  assert.doesNotMatch(html, /<h2>Take history<\/h2>/);
   const unauthorized = await fetch(new URL('/api/session', studio.url));
   assert.equal(unauthorized.status, 403);
   const token = new URL(studio.url).searchParams.get('token');
@@ -303,6 +311,11 @@ test('serves the muted studio and take audio only through its local token', asyn
   const unauthorizedAudio = new URL(audioUrl);
   unauthorizedAudio.searchParams.delete('token');
   assert.equal((await fetch(unauthorizedAudio)).status, 403);
+  const latestUrl = new URL('/api/accept-latest', studio.url);
+  latestUrl.searchParams.set('token', token);
+  const latest = await fetch(latestUrl, { method: 'POST' });
+  assert.equal(latest.status, 200);
+  assert.equal((await latest.json()).accepted[0].takeId, take.take.id);
   await assert.rejects(
     createVoiceoverStudio(files.manifest, { open: false }),
     /already open/,

@@ -5,6 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 
 import {
+  acceptLatestEligibleVoiceoverTakes,
   acceptVoiceoverTake,
   clearVoiceoverAcceptance,
   completeVoiceoverSession,
@@ -200,6 +201,14 @@ export async function createVoiceoverStudio(manifest, {
       if (request.method === 'POST' && url.pathname === '/api/accept') {
         const body = JSON.parse((await readBody(request, 1024 * 1024)).toString('utf8'));
         sendJson(response, 200, acceptVoiceoverTake(manifest, body.takeId, sessionDir));
+        return;
+      }
+      if (request.method === 'POST' && url.pathname === '/api/accept-latest') {
+        sendJson(
+          response,
+          200,
+          acceptLatestEligibleVoiceoverTakes(manifest, sessionDir),
+        );
         return;
       }
       if (request.method === 'POST' && url.pathname === '/api/unaccept') {

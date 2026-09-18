@@ -83,7 +83,9 @@ test('skill documents watchable and resilient driver defaults', () => {
     /recording controls, microphone, meter, and status pinned/,
     /pin that scene's teleprompter\s+text across the initial media seek/,
     /Show Play and Stop directly\s+on every recorded scene row/,
-    /beside every take in\s+history/,
+    /scene's collapsed history/,
+    /never build one global take\s+list/,
+    /Use latest eligible takes bulk action/,
     /require an explicit Use action/,
     /Human artifacts use separate `-human` names/,
   ]) {

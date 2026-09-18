@@ -487,6 +487,27 @@ export function acceptVoiceoverTake(manifest, takeId, sessionDir = null) {
   return session.state;
 }
 
+export function acceptLatestEligibleVoiceoverTakes(
+  manifest,
+  sessionDir = null,
+) {
+  const session = readVoiceoverSession(manifest, sessionDir);
+  const accepted = [];
+  for (const prompt of session.state.prompts) {
+    const take = [...session.state.takes].reverse().find(
+      (entry) =>
+        entry.kind === 'scene' &&
+        entry.sceneId === prompt.sceneId &&
+        entry.fit.status !== 'over',
+    );
+    if (!take || session.state.accepted.scenes[prompt.sceneId] === take.id) continue;
+    session.state.accepted.scenes[prompt.sceneId] = take.id;
+    accepted.push({ sceneId: prompt.sceneId, takeId: take.id });
+  }
+  if (accepted.length) writeJson(sessionFile(session.directory), session.state);
+  return { accepted, state: session.state };
+}
+
 export function clearVoiceoverAcceptance(
   manifest,
   { kind, sceneId = null, sessionDir = null },
