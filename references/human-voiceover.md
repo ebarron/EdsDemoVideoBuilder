@@ -51,8 +51,9 @@ The video is always muted; the synthetic voice is not played.
 - Choose the desired microphone after granting access; the live meter follows
   the selected input.
 - Every take is retained without changing the accepted selection. Use
-  **Play** and **Stop** beside a take to audition it, then choose **Use** only
-  after approving what you heard.
+  **Play** and **Stop** directly on a recorded scene row to audition its latest
+  take. The same controls appear in take history for every prior take; choose
+  **Use** only after approving what you heard.
 - Overlong takes can be auditioned but cannot be selected. Use a previous take
   from history to restore it, or clear a scene override to return to the full
   take.

@@ -28,9 +28,12 @@ export function voiceoverStudioHtml(token) {
     .meter { height: 10px; background: #242a36; border-radius: 999px; overflow: hidden; margin: 14px 0; }
     .meter > div { height: 100%; width: 0; background: linear-gradient(90deg, #44d287, #f7d154, #ff5d72); transition: width 60ms linear; }
     .status { min-height: 42px; color: #b9c2d3; font-size: 14px; margin: 12px 0; white-space: pre-wrap; }
-    .scene { width: 100%; text-align: left; background: #1b202b; margin: 7px 0; border: 1px solid transparent; }
+    .scene-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 7px; margin: 7px 0; }
+    .scene { width: 100%; text-align: left; background: #1b202b; margin: 0; border: 1px solid transparent; }
     .scene.selected { border-color: #6da0ff; background: #202b40; }
     .scene small { display: block; color: #9ba5b8; margin-top: 4px; }
+    .scene-audition { display: flex; gap: 5px; }
+    .scene-audition button { padding: 7px 9px; font-size: 11px; }
     .take { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid #252b38; font-size: 12px; }
     .take > span:first-child { flex: 1; min-width: 120px; }
     .take-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
@@ -215,16 +218,38 @@ export function voiceoverStudioHtml(token) {
           's</span> <button class="secondary" data-clear-master>Clear full take</button></p>'
         : '<p>No full take accepted. Record one full take, or record every scene.</p>';
       document.getElementById('scenes').innerHTML = session.prompts.map((prompt) => {
-        const takeId = session.accepted.scenes[prompt.sceneId];
-        const take = session.takes.find((candidate) => candidate.id === takeId);
-        const fit = take
-          ? '<span class="pill ' + take.fit.status + '">' + take.fit.status + ' · ' +
-            take.effectiveDuration.toFixed(1) + '/' + prompt.windowDuration.toFixed(1) + 's</span>'
-          : '<span class="pill">not recorded</span>';
-        return '<button class="scene ' + (prompt.sceneId === selectedScene ? 'selected' : '') +
+        const acceptedTakeId = session.accepted.scenes[prompt.sceneId];
+        const acceptedTake = session.takes.find((candidate) => candidate.id === acceptedTakeId);
+        const latestTake = [...session.takes].reverse().find(
+          (candidate) => candidate.kind === 'scene' && candidate.sceneId === prompt.sceneId,
+        );
+        const reviewTake = latestTake ?? acceptedTake;
+        let fit = '<span class="pill">not recorded</span>';
+        if (acceptedTake) {
+          fit = '<span class="pill ' + acceptedTake.fit.status + '">in use · ' +
+            acceptedTake.effectiveDuration.toFixed(1) + '/' +
+            prompt.windowDuration.toFixed(1) + 's</span>';
+        }
+        if (latestTake && latestTake.id !== acceptedTakeId) {
+          const latestFit = '<span class="pill ' + latestTake.fit.status +
+            '">review latest · ' +
+            latestTake.effectiveDuration.toFixed(1) + '/' +
+            prompt.windowDuration.toFixed(1) + 's</span>';
+          fit = acceptedTake ? fit + latestFit : latestFit;
+        }
+        const controls = reviewTake
+          ? '<span class="scene-audition">' +
+            '<button class="secondary" data-play-take="' + escapeHtml(reviewTake.id) +
+            '" aria-label="Play latest take for ' + escapeHtml(prompt.title) + '">Play</button>' +
+            '<button class="secondary" data-stop-take="' + escapeHtml(reviewTake.id) +
+            '" aria-label="Stop latest take for ' + escapeHtml(prompt.title) +
+            '" disabled>Stop</button></span>'
+          : '';
+        return '<div class="scene-row"><button class="scene ' +
+          (prompt.sceneId === selectedScene ? 'selected' : '') +
           '" data-scene="' + escapeHtml(prompt.sceneId) + '"><strong>' + escapeHtml(prompt.title) +
           '</strong>' + fit + '<small>' + format(prompt.start) + '–' + format(prompt.end) +
-          '</small></button>';
+          '</small></button>' + controls + '</div>';
       }).join('');
       for (const button of document.querySelectorAll('[data-scene]')) {
         button.addEventListener('click', () => {
