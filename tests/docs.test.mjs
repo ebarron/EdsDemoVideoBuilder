@@ -80,6 +80,8 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Do not require the user to name a command, manifest, or workflow/,
     /finish and verify the separate\s+human-voice output automatically/,
     /studio must play the locked video muted/,
+    /Show Play and Stop beside\s+every take/,
+    /require an explicit Use action/,
     /Human artifacts use separate `-human` names/,
   ]) {
     assert.match(SKILL, pattern);

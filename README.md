@@ -272,9 +272,11 @@ node scripts/demo.mjs voiceover-verify --manifest path/to/demo.yaml
 The video is always muted in the local, token-protected studio; no synthetic
 audio plays. It supports a
 continuous full take and scene-level punch-in retakes, normalizes microphone
-recordings to 48 kHz mono WAV, retains take history, and reports whether scene
-retakes fit their available windows. Overlong speech requires a natural retake;
-it is never automatically sped up.
+recordings to 48 kHz mono WAV, retains take history, and provides Play/Stop
+controls for auditioning every take before explicitly choosing Use. Recording
+a take does not replace the accepted selection. Overlong speech requires a
+natural retake; it can be auditioned but cannot be used or automatically sped
+up.
 
 Starting the studio creates an immutable picture-lock package, including the
 approved video, timeline, script, scene plan, contact sheet, and raw take when

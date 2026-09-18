@@ -9,6 +9,7 @@ import ffmpegStatic from 'ffmpeg-static';
 
 import { createVoiceoverStudio } from '../runtime/voiceover-studio.mjs';
 import {
+  acceptVoiceoverTake,
   buildVoiceoverAudioGraph,
   buildVoiceoverPrompts,
   createVoiceoverSession,
@@ -222,6 +223,7 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
     bytes: waveBuffer(1.5),
   });
   assert.equal(over.accepted, false);
+  assert.equal(over.eligible, false);
   assert.equal(over.state.accepted.scenes.opening, undefined);
   const boundaryStopped = registerVoiceoverTake({
     manifest: files.manifest,
@@ -231,7 +233,9 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
     captureDurationMs: 1400,
     bytes: waveBuffer(1.5),
   });
-  assert.equal(boundaryStopped.accepted, true);
+  assert.equal(boundaryStopped.accepted, false);
+  assert.equal(boundaryStopped.eligible, true);
+  assert.equal(boundaryStopped.state.accepted.scenes.opening, undefined);
   assert.equal(boundaryStopped.take.effectiveDuration, 1.4);
   const opening = registerVoiceoverTake({
     manifest: files.manifest,
@@ -242,13 +246,15 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
   });
   assert.equal(opening.take.sampleRate, 48000);
   assert.match(opening.take.waveHash, /^sha256:[a-f0-9]{64}$/);
-  registerVoiceoverTake({
+  const close = registerVoiceoverTake({
     manifest: files.manifest,
     kind: 'scene',
     sceneId: 'close',
     contentType: 'audio/wav',
     bytes: waveBuffer(0.4),
   });
+  acceptVoiceoverTake(files.manifest, opening.take.id);
+  acceptVoiceoverTake(files.manifest, close.take.id);
   const result = finishVoiceover(files.manifest, { stdio: 'pipe' });
   assert.equal(fs.existsSync(result.video), true);
   assert.notEqual(result.video, files.manifest.output.video);
@@ -264,18 +270,39 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
   assert.equal(fs.existsSync(files.manifest.output.video), true);
 });
 
-test('serves the muted teleprompter studio only through its local token', async () => {
+test('serves the muted studio and take audio only through its local token', async () => {
   const files = fixture();
   const studio = await createVoiceoverStudio(files.manifest, { open: false });
   const page = await fetch(studio.url);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /The video is always muted/);
+  const html = await page.text();
+  assert.match(html, /The video is always muted/);
+  assert.match(html, /data-play-take/);
+  assert.match(html, /data-stop-take/);
   const unauthorized = await fetch(new URL('/api/session', studio.url));
   assert.equal(unauthorized.status, 403);
   const token = new URL(studio.url).searchParams.get('token');
   const session = await fetch(`${new URL(studio.url).origin}/api/session?token=${token}`);
   assert.equal(session.status, 200);
   const firstState = await session.json();
+  const take = registerVoiceoverTake({
+    manifest: files.manifest,
+    kind: 'scene',
+    sceneId: 'opening',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(1),
+    sessionDir: studio.directory,
+  });
+  const audioUrl = new URL('/api/take-audio', studio.url);
+  audioUrl.searchParams.set('token', token);
+  audioUrl.searchParams.set('takeId', take.take.id);
+  const audio = await fetch(audioUrl, { headers: { range: 'bytes=0-31' } });
+  assert.equal(audio.status, 206);
+  assert.equal(audio.headers.get('content-type'), 'audio/wav');
+  assert.equal((await audio.arrayBuffer()).byteLength, 32);
+  const unauthorizedAudio = new URL(audioUrl);
+  unauthorizedAudio.searchParams.delete('token');
+  assert.equal((await fetch(unauthorizedAudio)).status, 403);
   await assert.rejects(
     createVoiceoverStudio(files.manifest, { open: false }),
     /already open/,

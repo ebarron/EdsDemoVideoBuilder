@@ -32,6 +32,8 @@ export function voiceoverStudioHtml(token) {
     .scene.selected { border-color: #6da0ff; background: #202b40; }
     .scene small { display: block; color: #9ba5b8; margin-top: 4px; }
     .take { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid #252b38; font-size: 12px; }
+    .take > span:first-child { flex: 1; min-width: 120px; }
+    .take-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
     .take button { padding: 6px 9px; font-size: 11px; }
     .pill { display: inline-block; border-radius: 999px; padding: 2px 7px; background: #30384a; margin-left: 6px; }
     .fits { color: #6ee7a8; } .tight { color: #f5cf66; } .over { color: #ff788a; }
@@ -66,6 +68,7 @@ export function voiceoverStudioHtml(token) {
       <h2>Scenes</h2>
       <div id="scenes"></div>
       <h2>Take history</h2>
+      <audio id="take-player" preload="none"></audio>
       <div id="takes"></div>
       <div class="controls" style="margin-top: 18px">
         <button id="complete" class="secondary">Save and close studio</button>
@@ -83,8 +86,10 @@ export function voiceoverStudioHtml(token) {
     const recordScene = document.getElementById('record-scene');
     const microphone = document.getElementById('microphone');
     const countdown = document.getElementById('countdown');
+    const takePlayer = document.getElementById('take-player');
     let session;
     let selectedScene;
+    let playingTakeId = null;
     let stream;
     let audioContext;
     let meterFrame;
@@ -148,6 +153,60 @@ export function voiceoverStudioHtml(token) {
       updatePrompt();
     }
 
+    function syncTakePlaybackButtons() {
+      const busy = Boolean(preparing || recording || uploading);
+      for (const button of document.querySelectorAll('[data-play-take]')) {
+        button.disabled =
+          busy ||
+          (button.dataset.playTake === playingTakeId && !takePlayer.paused);
+      }
+      for (const button of document.querySelectorAll('[data-stop-take]')) {
+        button.disabled =
+          busy ||
+          button.dataset.stopTake !== playingTakeId ||
+          takePlayer.paused;
+      }
+    }
+
+    function stopTakePlayback(message = null) {
+      const stoppedTakeId = playingTakeId;
+      takePlayer.pause();
+      takePlayer.currentTime = 0;
+      playingTakeId = null;
+      syncTakePlaybackButtons();
+      if (message && stoppedTakeId) status.textContent = message;
+    }
+
+    async function playTake(takeId) {
+      if (preparing || recording || uploading) return;
+      stopTakePlayback();
+      const take = session.takes.find((entry) => entry.id === takeId);
+      if (!take) throw new Error('The selected take is no longer available');
+      playingTakeId = takeId;
+      takePlayer.src = withToken(
+        '/api/take-audio?takeId=' + encodeURIComponent(takeId),
+      );
+      syncTakePlaybackButtons();
+      try {
+        await takePlayer.play();
+        status.textContent =
+          'Playing ' + (take.kind === 'master' ? 'full take' : take.sceneId) +
+          '. Choose Use only after you approve it.';
+        syncTakePlaybackButtons();
+      } catch (error) {
+        playingTakeId = null;
+        syncTakePlaybackButtons();
+        throw new Error('Could not play take: ' + error.message);
+      }
+    }
+
+    takePlayer.addEventListener('ended', () => {
+      playingTakeId = null;
+      takePlayer.currentTime = 0;
+      syncTakePlaybackButtons();
+      status.textContent = 'Take playback finished. Choose Use to accept it, or record another take.';
+    });
+
     function render() {
       const master = session.takes.find((take) => take.id === session.accepted.master);
       document.getElementById('master').innerHTML = master
@@ -170,6 +229,7 @@ export function voiceoverStudioHtml(token) {
       for (const button of document.querySelectorAll('[data-scene]')) {
         button.addEventListener('click', () => {
           if (preparing || recording || uploading) return;
+          stopTakePlayback();
           selectedScene = button.dataset.scene;
           const prompt = session.prompts.find((entry) => entry.sceneId === selectedScene);
           video.currentTime = prompt.start;
@@ -177,19 +237,42 @@ export function voiceoverStudioHtml(token) {
           updatePrompt();
         });
       }
-      document.getElementById('takes').innerHTML = [...session.takes].reverse().map((take) =>
-        '<div class="take"><span>' + escapeHtml(take.kind === 'master' ? 'Full take' : take.sceneId) +
-        ' · ' + take.effectiveDuration.toFixed(1) + 's · ' + escapeHtml(take.fit.status) +
-        '</span><button class="secondary" data-take="' + take.id + '"' +
-        (take.fit.status === 'over' ? ' disabled' : '') + '>Use</button>' +
-        (take.kind === 'scene' && session.accepted.scenes[take.sceneId] === take.id
-          ? '<button class="secondary" data-clear-scene="' + escapeHtml(take.sceneId) +
-            '">Clear scene override</button>'
-          : '') + '</div>'
-      ).join('') || '<p>No takes yet.</p>';
+      document.getElementById('takes').innerHTML = [...session.takes].reverse().map((take) => {
+        const accepted = take.kind === 'master'
+          ? session.accepted.master === take.id
+          : session.accepted.scenes[take.sceneId] === take.id;
+        const takeId = escapeHtml(take.id);
+        return '<div class="take"><span>' +
+          escapeHtml(take.kind === 'master' ? 'Full take' : take.sceneId) +
+          ' · ' + take.effectiveDuration.toFixed(1) + 's · ' + escapeHtml(take.fit.status) +
+          (accepted ? '<span class="pill">in use</span>' : '') +
+          '</span><span class="take-actions">' +
+          '<button class="secondary" data-play-take="' + takeId + '">Play</button>' +
+          '<button class="secondary" data-stop-take="' + takeId + '" disabled>Stop</button>' +
+          '<button class="secondary" data-take="' + takeId + '"' +
+          (take.fit.status === 'over' || accepted ? ' disabled' : '') +
+          '>' + (accepted ? 'In use' : 'Use') + '</button>' +
+          (take.kind === 'scene' && accepted
+            ? '<button class="secondary" data-clear-scene="' + escapeHtml(take.sceneId) +
+              '">Clear scene override</button>'
+            : '') + '</span></div>';
+      }).join('') || '<p>No takes yet.</p>';
+      for (const button of document.querySelectorAll('[data-play-take]')) {
+        button.addEventListener('click', () => {
+          playTake(button.dataset.playTake).catch((error) => {
+            status.textContent = error.message;
+          });
+        });
+      }
+      for (const button of document.querySelectorAll('[data-stop-take]')) {
+        button.addEventListener('click', () => {
+          stopTakePlayback('Take playback stopped. Choose Use to accept it, or record another take.');
+        });
+      }
       for (const button of document.querySelectorAll('[data-take]')) {
         button.addEventListener('click', async () => {
           if (preparing || recording || uploading) return;
+          stopTakePlayback();
           const response = await fetch(withToken('/api/accept'), {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -200,6 +283,7 @@ export function voiceoverStudioHtml(token) {
             return;
           }
           await refresh();
+          status.textContent = 'Take accepted for the final human voiceover.';
         });
       }
       for (const button of document.querySelectorAll('[data-clear-master], [data-clear-scene]')) {
@@ -222,6 +306,7 @@ export function voiceoverStudioHtml(token) {
       for (const button of document.querySelectorAll('#scenes button, #takes button, #master button')) {
         button.disabled ||= Boolean(preparing || recording || uploading);
       }
+      syncTakePlaybackButtons();
     }
 
     function escapeHtml(value) {
@@ -328,6 +413,7 @@ export function voiceoverStudioHtml(token) {
       const prompt = session.prompts.find((entry) => entry.sceneId === selectedScene);
       if (kind === 'scene' && !prompt) return;
       try {
+        stopTakePlayback();
         preparing = true;
         recordMaster.disabled = true;
         recordScene.disabled = true;
@@ -444,9 +530,12 @@ export function voiceoverStudioHtml(token) {
           status.textContent = 'Take failed: ' + await response.text();
         } else {
           const result = await response.json();
-          status.textContent = 'Take saved' + (result.accepted ? ' and selected' : ' but not selected') +
-            ': ' + result.take.fit.status +
-            ' (' + result.take.effectiveDuration.toFixed(1) + 's). Previous takes were retained.';
+          status.textContent = result.eligible
+            ? 'Take saved but not selected: ' + result.take.fit.status +
+              ' (' + result.take.effectiveDuration.toFixed(1) +
+              's). Play it, then choose Use to accept it.'
+            : 'Take saved but cannot be used because it is overlong (' +
+              result.take.effectiveDuration.toFixed(1) + 's). You can play it before retaking.';
         }
       } catch (error) {
         status.textContent = 'Take failed: ' + error.message;
@@ -482,6 +571,7 @@ export function voiceoverStudioHtml(token) {
         const response = await fetch(withToken('/api/complete'), { method: 'POST' });
         if (!response.ok) throw new Error(await response.text());
         releaseMicrophone();
+        stopTakePlayback();
         video.pause();
         status.textContent = 'Session saved. You may close this window.';
       } catch (error) {
@@ -489,7 +579,10 @@ export function voiceoverStudioHtml(token) {
       }
     });
 
-    window.addEventListener('pagehide', releaseMicrophone);
+    window.addEventListener('pagehide', () => {
+      stopTakePlayback();
+      releaseMicrophone();
+    });
     refresh().catch((error) => { status.textContent = error.message; });
   </script>
 </body>

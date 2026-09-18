@@ -73,6 +73,9 @@ try {
   );
   assert.equal(await page.getByLabel('Microphone').isVisible(), true);
   assert.equal(await page.locator('video').evaluate((element) => element.muted), true);
+  assert.equal(await page.locator('#take-player').count(), 1);
+  assert.match(await page.content(), /data-play-take/);
+  assert.match(await page.content(), /data-stop-take/);
   assert.deepEqual(pageErrors, []);
 } finally {
   await browser?.close();

@@ -71,6 +71,8 @@ test('README links resolve and prompt states safety gates', () => {
     /rerecord the video with my own voice using the teleprompter/,
     /video is always muted/,
     /continuous full take and scene-level punch-in retakes/,
+    /Play\/Stop\s+controls for auditioning every take/,
+    /Recording\s+a take does not replace the accepted selection/,
     /node scripts\/demo\.mjs voiceover-finish/,
     /Human output uses `-human` filenames and never overwrites the\s+synthetic version/,
     /gh repo clone ebarron\/EdsDemoVideoBuilder "\$HOME\/\.cursor\/skills\/demo-video-builder"/,

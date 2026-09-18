@@ -317,8 +317,10 @@ node scripts/demo.mjs voiceover --manifest path/to/demo.yaml
 The studio must play the locked video muted, show the current and next spoken
 cues, request microphone permission in the local browser, and retain every full
 or scene-level take. It normalizes accepted recordings to 48 kHz mono WAV.
-Overlong takes require a natural retake; never speed up human speech or browser
-motion.
+Recording must not replace an accepted selection. Show Play and Stop beside
+every take so the user can audition it, then require an explicit Use action to
+accept it. Overlong takes remain playable but require a natural retake; never
+accept them or speed up human speech or browser motion.
 
 After the user saves and closes the studio, finish and verify the separate
 human-voice output automatically unless they asked only to capture takes:

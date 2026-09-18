@@ -50,16 +50,20 @@ The video is always muted; the synthetic voice is not played.
 - **Record selected scene** seeks to one scene for a punch-in retake.
 - Choose the desired microphone after granting access; the live meter follows
   the selected input.
-- The most recent take that fits is selected automatically. Overlong takes are
-  retained but cannot be selected. Use a previous take from history to restore
-  it, or clear a scene override to return to the full take.
+- Every take is retained without changing the accepted selection. Use
+  **Play** and **Stop** beside a take to audition it, then choose **Use** only
+  after approving what you heard.
+- Overlong takes can be auditioned but cannot be selected. Use a previous take
+  from history to restore it, or clear a scene override to return to the full
+  take.
 - The microphone meter remains visible during setup and recording.
 - A take is discarded if locked playback stalls, pauses, seeks, or changes
   speed, because its audio can no longer be aligned safely.
 - **Save and close studio** persists choices and ends the local server.
 
 Browser capture formats vary. Every uploaded take is retained in its original
-format and normalized to a 48 kHz mono PCM WAV master before it is accepted.
+format and normalized to a 48 kHz mono PCM WAV master before it is available
+for audition and acceptance.
 
 ## Timing fit
 

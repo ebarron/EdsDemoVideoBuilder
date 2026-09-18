@@ -11,6 +11,7 @@ import {
   createVoiceoverSession,
   readVoiceoverSession,
   registerVoiceoverTake,
+  resolveVoiceoverTakeAudio,
 } from './voiceover.mjs';
 import { voiceoverStudioHtml } from './voiceover-ui.mjs';
 
@@ -91,11 +92,11 @@ function readBody(request, maximum = MAX_TAKE_BYTES) {
   });
 }
 
-function serveVideo(request, response, file) {
+function serveMedia(request, response, file, contentType) {
   const stat = fs.statSync(file);
   const range = request.headers.range;
   const headers = {
-    'content-type': 'video/mp4',
+    'content-type': contentType,
     'accept-ranges': 'bytes',
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
@@ -163,11 +164,21 @@ export async function createVoiceoverStudio(manifest, {
       }
       if (request.method === 'GET' && url.pathname === '/video') {
         const session = readVoiceoverSession(manifest, sessionDir);
-        serveVideo(
+        serveMedia(
           request,
           response,
           path.join(session.directory, session.state.pictureLock.video),
+          'video/mp4',
         );
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/api/take-audio') {
+        const { file } = resolveVoiceoverTakeAudio(
+          manifest,
+          url.searchParams.get('takeId'),
+          sessionDir,
+        );
+        serveMedia(request, response, file, 'audio/wav');
         return;
       }
       if (request.method === 'POST' && url.pathname === '/api/takes') {

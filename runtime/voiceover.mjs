@@ -453,11 +453,25 @@ export function registerVoiceoverTake({
       : voiceoverTimingFit(effectiveDuration, session.state.pictureLock.finalDuration),
   };
   session.state.takes.push(take);
-  const accepted = take.fit.status !== 'over';
-  if (accepted && kind === 'master') session.state.accepted.master = takeId;
-  else if (accepted) session.state.accepted.scenes[sceneId] = takeId;
   writeJson(sessionFile(session.directory), session.state);
-  return { take, accepted, state: session.state };
+  return {
+    take,
+    accepted: false,
+    eligible: take.fit.status !== 'over',
+    state: session.state,
+  };
+}
+
+export function resolveVoiceoverTakeAudio(manifest, takeId, sessionDir = null) {
+  const session = readVoiceoverSession(manifest, sessionDir);
+  const take = session.state.takes.find((entry) => entry.id === takeId);
+  if (!take) throw new Error(`Unknown voiceover take: ${takeId}`);
+  const takesDirectory = fs.realpathSync(path.join(session.directory, 'takes'));
+  const file = fs.realpathSync(path.resolve(session.directory, take.wave));
+  if (!file.startsWith(`${takesDirectory}${path.sep}`)) {
+    throw new Error(`Voiceover take path escapes its session: ${takeId}`);
+  }
+  return { file, take };
 }
 
 export function acceptVoiceoverTake(manifest, takeId, sessionDir = null) {
