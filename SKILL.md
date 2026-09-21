@@ -326,11 +326,19 @@ that scene's collapsed history, then require an explicit Use action to accept
 it. Keep full-take history beside the master area; never build one global take
 list. Offer an explicit, reversible Use latest eligible takes bulk action that
 skips overlong takes rather than automatically accepting during recording.
+Offer an unchecked-by-default Delete other takes after selection control. When
+enabled, an individual Use permanently removes every other take and audio file
+in that scene or full-take group; bulk selection does the same per recorded
+scene while retaining its latest eligible take.
 Overlong takes remain playable but require a natural retake; never accept them
 or speed up human speech or browser motion.
 
-After the user saves and closes the studio, finish and verify the separate
-human-voice output automatically unless they asked only to capture takes:
+Saving must present an unmistakable completed state, stop the studio server,
+and provide a copyable prompt asking the agent to finish, verify, open the
+result, and preserve the session for revisions; it must not imply that final
+assembly is complete. After the user saves and closes the studio, finish and
+verify the separate human-voice output automatically unless they asked only to
+capture takes:
 
 ```bash
 node scripts/demo.mjs voiceover-finish --manifest path/to/demo.yaml
@@ -340,6 +348,9 @@ node scripts/demo.mjs voiceover-verify --manifest path/to/demo.yaml
 The session preserves an immutable picture-lock package and the synthetic
 outputs. Human artifacts use separate `-human` names. If the picture changed,
 use `voiceover --new-session`; never attach prior takes to a different video.
+Finishing preserves the existing session. For revisions, reopen it without
+`--new-session`, then regenerate with `voiceover-finish --force` and rerun
+`voiceover-verify`.
 Read [references/human-voiceover.md](references/human-voiceover.md).
 
 Existing `clips` and `reference` workflows remain available for externally

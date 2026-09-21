@@ -474,7 +474,51 @@ export function resolveVoiceoverTakeAudio(manifest, takeId, sessionDir = null) {
   return { file, take };
 }
 
-export function acceptVoiceoverTake(manifest, takeId, sessionDir = null) {
+function takeScope(take) {
+  return take.kind === 'master' ? 'master' : `scene:${take.sceneId}`;
+}
+
+function planTakeCleanup(session, selectedTakes) {
+  const selectedByScope = new Map(
+    selectedTakes.map((take) => [takeScope(take), take.id]),
+  );
+  const discarded = session.state.takes.filter((take) => {
+    const selected = selectedByScope.get(takeScope(take));
+    return selected && selected !== take.id;
+  });
+  const takesDirectory = path.resolve(session.directory, 'takes');
+  const realTakesDirectory = fs.realpathSync(takesDirectory);
+  const files = discarded.flatMap((take) =>
+    [take.source, take.wave].filter(Boolean).map((relative) => {
+      const file = path.resolve(session.directory, relative);
+      if (!file.startsWith(`${takesDirectory}${path.sep}`)) {
+        throw new Error(`Voiceover take path escapes its session: ${take.id}`);
+      }
+      if (!fs.existsSync(file)) return file;
+      const realFile = fs.realpathSync(file);
+      if (!realFile.startsWith(`${realTakesDirectory}${path.sep}`)) {
+        throw new Error(`Voiceover take path escapes its session: ${take.id}`);
+      }
+      return realFile;
+    }));
+  const discardedIds = new Set(discarded.map((take) => take.id));
+  return {
+    discarded,
+    files,
+    retained: session.state.takes.filter((take) => !discardedIds.has(take.id)),
+  };
+}
+
+function deleteTakeArtifacts(files) {
+  for (const file of files) fs.rmSync(file, { force: true });
+}
+
+export function acceptVoiceoverTake(
+  manifest,
+  takeId,
+  sessionDir = null,
+  { cleanup = false } = {},
+) {
   const session = readVoiceoverSession(manifest, sessionDir);
   const take = session.state.takes.find((entry) => entry.id === takeId);
   if (!take) throw new Error(`Unknown voiceover take: ${takeId}`);
@@ -483,16 +527,26 @@ export function acceptVoiceoverTake(manifest, takeId, sessionDir = null) {
   }
   if (take.kind === 'master') session.state.accepted.master = take.id;
   else session.state.accepted.scenes[take.sceneId] = take.id;
+  const cleanupPlan = cleanup
+    ? planTakeCleanup(session, [take])
+    : { discarded: [], files: [], retained: session.state.takes };
+  session.state.takes = cleanupPlan.retained;
   writeJson(sessionFile(session.directory), session.state);
-  return session.state;
+  deleteTakeArtifacts(cleanupPlan.files);
+  return {
+    ...session.state,
+    cleanup: { deleted: cleanupPlan.discarded.length },
+  };
 }
 
 export function acceptLatestEligibleVoiceoverTakes(
   manifest,
   sessionDir = null,
+  { cleanup = false } = {},
 ) {
   const session = readVoiceoverSession(manifest, sessionDir);
   const accepted = [];
+  const selected = [];
   for (const prompt of session.state.prompts) {
     const take = [...session.state.takes].reverse().find(
       (entry) =>
@@ -500,12 +554,27 @@ export function acceptLatestEligibleVoiceoverTakes(
         entry.sceneId === prompt.sceneId &&
         entry.fit.status !== 'over',
     );
-    if (!take || session.state.accepted.scenes[prompt.sceneId] === take.id) continue;
-    session.state.accepted.scenes[prompt.sceneId] = take.id;
-    accepted.push({ sceneId: prompt.sceneId, takeId: take.id });
+    if (!take) continue;
+    selected.push(take);
+    if (session.state.accepted.scenes[prompt.sceneId] !== take.id) {
+      session.state.accepted.scenes[prompt.sceneId] = take.id;
+      accepted.push({ sceneId: prompt.sceneId, takeId: take.id });
+    }
   }
-  if (accepted.length) writeJson(sessionFile(session.directory), session.state);
-  return { accepted, state: session.state };
+  const cleanupPlan = cleanup
+    ? planTakeCleanup(session, selected)
+    : { discarded: [], files: [], retained: session.state.takes };
+  session.state.takes = cleanupPlan.retained;
+  if (accepted.length || cleanupPlan.discarded.length) {
+    writeJson(sessionFile(session.directory), session.state);
+  }
+  deleteTakeArtifacts(cleanupPlan.files);
+  return {
+    accepted,
+    selected: selected.length,
+    deleted: cleanupPlan.discarded.length,
+    state: session.state,
+  };
 }
 
 export function clearVoiceoverAcceptance(

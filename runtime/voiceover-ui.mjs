@@ -25,6 +25,9 @@ export function voiceoverStudioHtml(token) {
     button:disabled { opacity: .45; cursor: not-allowed; }
     .controls { display: flex; flex-wrap: wrap; gap: 9px; }
     label { display: grid; gap: 5px; margin-top: 14px; color: #b9c2d3; font-size: 13px; }
+    .cleanup-option { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .cleanup-option input { width: 16px; height: 16px; margin: 0; accent-color: #6da0ff; }
+    .cleanup-note { color: #8993a7; font-size: 11px; margin: 4px 0 0 24px; }
     select { width: 100%; border: 1px solid #343d50; border-radius: 7px; padding: 8px; background: #1b202b; color: white; }
     .meter { height: 10px; background: #242a36; border-radius: 999px; overflow: hidden; margin: 14px 0; }
     .meter > div { height: 100%; width: 0; background: linear-gradient(90deg, #44d287, #f7d154, #ff5d72); transition: width 60ms linear; }
@@ -45,11 +48,29 @@ export function voiceoverStudioHtml(token) {
     .pill { display: inline-block; border-radius: 999px; padding: 2px 7px; background: #30384a; margin-left: 6px; }
     .fits { color: #6ee7a8; } .tight { color: #f5cf66; } .over { color: #ff788a; }
     #countdown { position: fixed; inset: 0; display: none; place-items: center; background: #05070bd9; font-size: 22vw; font-weight: 800; z-index: 10; }
+    #completed { position: fixed; inset: 0; display: none; place-items: center; padding: 32px; background: #080a0ef2; text-align: center; z-index: 20; }
+    #completed.visible { display: grid; }
+    #completed h1 { color: #8fb8ff; margin: 0 0 12px; }
+    #completed p { color: #c7cede; font-size: 17px; line-height: 1.5; margin: 6px 0; }
+    .saved-card { width: min(680px, 100%); }
+    #handoff-prompt { width: 100%; min-height: 110px; margin: 14px 0 10px; padding: 12px; border: 1px solid #3b465c; border-radius: 8px; background: #151922; color: #f6f7fb; font: inherit; line-height: 1.45; resize: none; }
+    #copy-status { min-height: 20px; color: #8fb8ff; font-size: 13px; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; } aside { max-height: none; border-left: 0; border-top: 1px solid #252b38; } }
   </style>
 </head>
 <body>
   <div id="countdown"></div>
+  <div id="completed">
+    <div class="saved-card">
+      <h1>Voiceover session saved</h1>
+      <p>The recording studio is closed and your selected takes are preserved.</p>
+      <p>Copy and send this prompt to your agent:</p>
+      <textarea id="handoff-prompt" readonly>Finish and verify the saved human-voiceover video, then open the result for review. Preserve the existing voiceover session and selected takes so I can reopen it for revisions.</textarea>
+      <button id="copy-handoff" class="secondary">Copy handoff prompt</button>
+      <div id="copy-status"></div>
+      <p>You can close this tab after copying the prompt.</p>
+    </div>
+  </div>
   <main>
     <section class="stage">
       <video id="video" controls muted playsinline></video>
@@ -68,6 +89,11 @@ export function voiceoverStudioHtml(token) {
           <button id="stop" class="danger" disabled>Stop</button>
           <button id="use-latest" class="secondary">Use latest eligible takes</button>
         </div>
+        <label class="cleanup-option" for="cleanup-takes">
+          <input id="cleanup-takes" type="checkbox">
+          Delete other takes after selection
+        </label>
+        <p class="cleanup-note">Unchecked by default. This permanently removes other takes from the selected scene or full-take group.</p>
         <label for="microphone">Microphone
           <select id="microphone"><option value="">System default</option></select>
         </label>
@@ -91,6 +117,11 @@ export function voiceoverStudioHtml(token) {
     const status = document.getElementById('status');
     const stopButton = document.getElementById('stop');
     const useLatest = document.getElementById('use-latest');
+    const cleanupTakes = document.getElementById('cleanup-takes');
+    const completeButton = document.getElementById('complete');
+    const handoffPrompt = document.getElementById('handoff-prompt');
+    const copyHandoff = document.getElementById('copy-handoff');
+    const copyStatus = document.getElementById('copy-status');
     const recordMaster = document.getElementById('record-master');
     const recordScene = document.getElementById('record-scene');
     const microphone = document.getElementById('microphone');
@@ -171,7 +202,16 @@ export function voiceoverStudioHtml(token) {
             entry.sceneId === prompt.sceneId &&
             entry.fit.status !== 'over',
         );
-        return take && session.accepted.scenes[prompt.sceneId] !== take.id
+        const hasOtherTakes = take && session.takes.some(
+          (entry) =>
+            entry.kind === 'scene' &&
+            entry.sceneId === prompt.sceneId &&
+            entry.id !== take.id,
+        );
+        return take && (
+          session.accepted.scenes[prompt.sceneId] !== take.id ||
+          (cleanupTakes.checked && hasOtherTakes)
+        )
           ? { prompt, take }
           : null;
       }).filter(Boolean);
@@ -325,14 +365,22 @@ export function voiceoverStudioHtml(token) {
           const response = await fetch(withToken('/api/accept'), {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ takeId: button.dataset.take }),
+            body: JSON.stringify({
+              takeId: button.dataset.take,
+              cleanup: cleanupTakes.checked,
+            }),
           });
           if (!response.ok) {
             status.textContent = await response.text();
             return;
           }
+          const result = await response.json();
           await refresh();
-          status.textContent = 'Take accepted for the final human voiceover.';
+          status.textContent = 'Take accepted for the final human voiceover.' +
+            (result.cleanup.deleted
+              ? ' Deleted ' + result.cleanup.deleted + ' other take' +
+                (result.cleanup.deleted === 1 ? '.' : 's.')
+              : '');
         });
       }
       for (const button of document.querySelectorAll('[data-clear-master], [data-clear-scene]')) {
@@ -661,30 +709,54 @@ export function voiceoverStudioHtml(token) {
       }
       if (!window.confirm(
         'Use the latest eligible take for ' + changes.length +
-        ' scene' + (changes.length === 1 ? '' : 's') + '?',
+        ' scene' + (changes.length === 1 ? '' : 's') + '?' +
+        (cleanupTakes.checked
+          ? ' This will permanently delete every other take in those scenes.'
+          : ''),
       )) return;
       stopTakePlayback();
       useLatest.disabled = true;
       try {
-        const response = await fetch(withToken('/api/accept-latest'), { method: 'POST' });
+        const response = await fetch(withToken('/api/accept-latest'), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ cleanup: cleanupTakes.checked }),
+        });
         if (!response.ok) throw new Error(await response.text());
         const result = await response.json();
         await refresh();
         status.textContent =
-          'Accepted the latest eligible take for ' + result.accepted.length +
-          ' scene' + (result.accepted.length === 1 ? '' : 's') + '.';
+          'Selected the latest eligible take for ' + result.selected +
+          ' scene' + (result.selected === 1 ? '' : 's') + '.' +
+          (result.deleted
+            ? ' Deleted ' + result.deleted + ' other take' +
+              (result.deleted === 1 ? '.' : 's.')
+            : '');
       } catch (error) {
         status.textContent = 'Could not use latest takes: ' + error.message;
         syncTakePlaybackButtons();
       }
     });
     stopButton.addEventListener('click', stopRecording);
+    cleanupTakes.addEventListener('change', syncTakePlaybackButtons);
+    copyHandoff.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(handoffPrompt.value);
+      } catch {
+        handoffPrompt.select();
+        if (!document.execCommand('copy')) {
+          copyStatus.textContent = 'Select the prompt and copy it manually.';
+          return;
+        }
+      }
+      copyStatus.textContent = 'Prompt copied. You can close this tab.';
+    });
     microphone.addEventListener('change', () => {
       if (preparing || recording || uploading || microphonePromise) return;
       releaseMicrophone();
       ensureMicrophone().catch((error) => { status.textContent = error.message; });
     });
-    document.getElementById('complete').addEventListener('click', async () => {
+    completeButton.addEventListener('click', async () => {
       if (preparing || microphonePromise || recorder?.state === 'recording' || uploading) {
         status.textContent = 'Stop and wait for the current take to finish processing.';
         return;
@@ -696,6 +768,10 @@ export function voiceoverStudioHtml(token) {
         stopTakePlayback();
         video.pause();
         status.textContent = 'Session saved. You may close this window.';
+        for (const control of document.querySelectorAll('main button, main input, main select')) {
+          control.disabled = true;
+        }
+        document.getElementById('completed').classList.add('visible');
       } catch (error) {
         status.textContent = 'Could not save session: ' + error.message;
       }

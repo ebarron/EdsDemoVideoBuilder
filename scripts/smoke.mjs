@@ -105,6 +105,8 @@ try {
   assert.equal(timeline.actions.at(-1).pointerProof.hitMatches, true);
 
   const pageErrors = [];
+  let smokeAccepted = false;
+  let cleanupRequested = false;
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.route('http://voiceover-smoke.test/**', async (route) => {
     const url = new URL(route.request().url());
@@ -126,8 +128,28 @@ try {
             effectiveDuration: 0.8,
             fit: { status: 'fits' },
           }],
-          accepted: { master: null, scenes: {} },
+          accepted: {
+            master: null,
+            scenes: smokeAccepted ? { 'scene-0': 'intro-take' } : {},
+          },
         }),
+      });
+    } else if (url.pathname === '/api/accept-latest') {
+      const body = route.request().postDataJSON();
+      cleanupRequested = body.cleanup === true;
+      smokeAccepted = true;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          accepted: [{ sceneId: 'scene-0', takeId: 'intro-take' }],
+          selected: 1,
+          deleted: 0,
+        }),
+      });
+    } else if (url.pathname === '/api/complete') {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ completedAt: new Date().toISOString() }),
       });
     } else if (url.pathname === '/api/take-audio') {
       await route.fulfill({ contentType: 'audio/wav', body: waveBuffer() });
@@ -152,6 +174,8 @@ try {
     await page.getByRole('button', { name: 'Use latest eligible takes' }).isEnabled(),
     true,
   );
+  const cleanupTakes = page.getByLabel('Delete other takes after selection');
+  assert.equal(await cleanupTakes.isChecked(), false);
   assert.equal(await page.getByRole('heading', { name: 'Take history' }).count(), 0);
   assert.equal(await page.getByText('Take history (1)').isVisible(), true);
   await playLatest.click();
@@ -160,6 +184,12 @@ try {
   assert.equal(await stopLatest.isEnabled(), true);
   await stopLatest.click();
   assert.equal(await stopLatest.isDisabled(), true);
+  await cleanupTakes.check();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Use latest eligible takes' }).click();
+  await page.waitForFunction(() =>
+    document.getElementById('status').textContent.includes('Selected the latest eligible take'));
+  assert.equal(cleanupRequested, true);
   const toolbar = page.locator('.studio-toolbar');
   assert.equal(await toolbar.evaluate((element) => getComputedStyle(element).position), 'sticky');
   await page.locator('aside').evaluate((element) => {
@@ -177,6 +207,17 @@ try {
   });
   assert.equal(await page.locator('#prompt-title').textContent(), 'Storage');
   assert.equal(await page.locator('#prompt-text').textContent(), 'Narration for scene 2.');
+  await page.getByRole('button', { name: 'Save and close studio' }).click();
+  await page.getByRole('heading', { name: 'Voiceover session saved' })
+    .waitFor({ state: 'visible' });
+  assert.match(
+    await page.locator('#handoff-prompt').inputValue(),
+    /Finish and verify the saved human-voiceover video/,
+  );
+  assert.equal(
+    await page.getByRole('button', { name: 'Copy handoff prompt' }).isEnabled(),
+    true,
+  );
   assert.deepEqual(pageErrors, []);
 } finally {
   await browser?.close();

@@ -200,14 +200,25 @@ export async function createVoiceoverStudio(manifest, {
       }
       if (request.method === 'POST' && url.pathname === '/api/accept') {
         const body = JSON.parse((await readBody(request, 1024 * 1024)).toString('utf8'));
-        sendJson(response, 200, acceptVoiceoverTake(manifest, body.takeId, sessionDir));
+        sendJson(response, 200, acceptVoiceoverTake(
+          manifest,
+          body.takeId,
+          sessionDir,
+          { cleanup: body.cleanup === true },
+        ));
         return;
       }
       if (request.method === 'POST' && url.pathname === '/api/accept-latest') {
+        const bytes = await readBody(request, 1024 * 1024);
+        const body = bytes.length ? JSON.parse(bytes.toString('utf8')) : {};
         sendJson(
           response,
           200,
-          acceptLatestEligibleVoiceoverTakes(manifest, sessionDir),
+          acceptLatestEligibleVoiceoverTakes(
+            manifest,
+            sessionDir,
+            { cleanup: body.cleanup === true },
+          ),
         );
         return;
       }

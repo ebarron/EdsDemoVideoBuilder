@@ -276,11 +276,17 @@ recordings to 48 kHz mono WAV, retains take history, and provides Play/Stop
 controls directly on recorded scene rows for auditioning the latest take.
 Each scene folds its prior takes into a collapsed local history, while full
 takes stay grouped by the master area. An explicit Use latest eligible takes
-action bulk-selects the newest fitting scene takes. Recording itself does not
-replace accepted selections. Overlong speech requires a natural retake; it can
-be auditioned but cannot be used or automatically sped up. The recording
-toolbar stays pinned while long scene lists scroll, and selected-scene
-recording pins the correct prompt across its initial video seek.
+action bulk-selects the newest fitting scene takes. An unchecked-by-default
+cleanup option can permanently delete other takes and their audio files when
+an individual or bulk selection is made. Recording itself does not replace
+accepted selections. Overlong speech requires a natural retake; it can be
+auditioned but cannot be used or automatically sped up. The recording toolbar
+stays pinned while long scene lists scroll, and selected-scene recording pins
+the correct prompt across its initial video seek. Saving visibly closes the
+recording session; final assembly still uses `voiceover-finish` followed by
+`voiceover-verify`. The saved screen provides a copyable handoff prompt.
+Finishing preserves the session, so revisions can reopen it without
+`--new-session` and regenerate with `voiceover-finish --force`.
 
 Starting the studio creates an immutable picture-lock package, including the
 approved video, timeline, script, scene plan, contact sheet, and raw take when

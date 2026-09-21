@@ -214,7 +214,7 @@ test('builds full-master and scene-override audio without speeding speech', () =
 
 test('records 48 kHz takes and finishes a separate human-voice video', () => {
   const files = fixture({ validVideo: true });
-  createVoiceoverSession(files.manifest);
+  const session = createVoiceoverSession(files.manifest);
   const over = registerVoiceoverTake({
     manifest: files.manifest,
     kind: 'scene',
@@ -253,7 +253,14 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
     contentType: 'audio/wav',
     bytes: waveBuffer(0.4),
   });
-  const latest = acceptLatestEligibleVoiceoverTakes(files.manifest);
+  const discardedFiles = [over.take, boundaryStopped.take].flatMap((take) =>
+    [take.source, take.wave].map((file) => path.resolve(session.directory, file)));
+  assert.equal(discardedFiles.every((file) => fs.existsSync(file)), true);
+  const latest = acceptLatestEligibleVoiceoverTakes(
+    files.manifest,
+    null,
+    { cleanup: true },
+  );
   assert.deepEqual(
     latest.accepted,
     [
@@ -261,6 +268,13 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
       { sceneId: 'close', takeId: close.take.id },
     ],
   );
+  assert.equal(latest.selected, 2);
+  assert.equal(latest.deleted, 2);
+  assert.deepEqual(latest.state.takes.map((take) => take.id), [
+    opening.take.id,
+    close.take.id,
+  ]);
+  assert.equal(discardedFiles.every((file) => !fs.existsSync(file)), true);
   const result = finishVoiceover(files.manifest, { stdio: 'pipe' });
   assert.equal(fs.existsSync(result.video), true);
   assert.notEqual(result.video, files.manifest.output.video);
@@ -286,6 +300,10 @@ test('serves the muted studio and take audio only through its local token', asyn
   assert.match(html, /data-play-take/);
   assert.match(html, /data-stop-take/);
   assert.match(html, /Use latest eligible takes/);
+  assert.match(html, /Delete other takes after selection/);
+  assert.match(html, /Voiceover session saved/);
+  assert.match(html, /Finish and verify the saved human-voiceover video/);
+  assert.match(html, /Copy handoff prompt/);
   assert.doesNotMatch(html, /<h2>Take history<\/h2>/);
   const unauthorized = await fetch(new URL('/api/session', studio.url));
   assert.equal(unauthorized.status, 403);
@@ -316,6 +334,29 @@ test('serves the muted studio and take audio only through its local token', asyn
   const latest = await fetch(latestUrl, { method: 'POST' });
   assert.equal(latest.status, 200);
   assert.equal((await latest.json()).accepted[0].takeId, take.take.id);
+  const replacement = registerVoiceoverTake({
+    manifest: files.manifest,
+    kind: 'scene',
+    sceneId: 'opening',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(0.8),
+    sessionDir: studio.directory,
+  });
+  const acceptUrl = new URL('/api/accept', studio.url);
+  acceptUrl.searchParams.set('token', token);
+  const accepted = await fetch(acceptUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ takeId: replacement.take.id, cleanup: true }),
+  });
+  assert.equal(accepted.status, 200);
+  assert.equal((await accepted.json()).cleanup.deleted, 1);
+  assert.equal(
+    [take.take.source, take.take.wave].every(
+      (file) => !fs.existsSync(path.resolve(studio.directory, file)),
+    ),
+    true,
+  );
   await assert.rejects(
     createVoiceoverStudio(files.manifest, { open: false }),
     /already open/,
