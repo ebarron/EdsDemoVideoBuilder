@@ -10,9 +10,11 @@ import ffmpegStatic from 'ffmpeg-static';
 import { createVoiceoverStudio } from '../runtime/voiceover-studio.mjs';
 import {
   acceptLatestEligibleVoiceoverTakes,
+  acceptVoiceoverTake,
   buildVoiceoverAudioGraph,
   buildVoiceoverPrompts,
   createVoiceoverSession,
+  deleteVoiceoverTake,
   finishVoiceover,
   readVoiceoverSession,
   registerVoiceoverTake,
@@ -209,7 +211,11 @@ test('builds full-master and scene-override audio without speeding speech', () =
   assert.doesNotMatch(graph.filters.join('\n'), /atempo/);
 
   state.takes[1].effectiveDuration = 2;
-  assert.throws(() => buildVoiceoverAudioGraph(state), /natural retake instead of speeding/);
+  state.takes[1].fit = voiceoverTimingFit(2, 1.5);
+  const trimmed = buildVoiceoverAudioGraph(state);
+  assert.match(trimmed.filters.join('\n'), /atrim=start=0\.05:duration=1\.5/);
+  assert.doesNotMatch(trimmed.filters.join('\n'), /atempo/);
+  assert.equal(voiceoverTimingFit(1.505, 1.5).status, 'tight');
 });
 
 test('records 48 kHz takes and finishes a separate human-voice video', () => {
@@ -225,6 +231,19 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
   assert.equal(over.accepted, false);
   assert.equal(over.eligible, false);
   assert.equal(over.state.accepted.scenes.opening, undefined);
+  assert.throws(
+    () => acceptVoiceoverTake(files.manifest, over.take.id),
+    /overlong voiceover take cannot be accepted/,
+  );
+  const allowedOver = acceptVoiceoverTake(
+    files.manifest,
+    over.take.id,
+    null,
+    { allowOverlong: true },
+  );
+  assert.equal(allowedOver.accepted.scenes.opening, over.take.id);
+  assert.equal(allowedOver.selection.overlong, true);
+  assert.equal(allowedOver.selection.trimmedSeconds > 0, true);
   const boundaryStopped = registerVoiceoverTake({
     manifest: files.manifest,
     kind: 'scene',
@@ -235,7 +254,7 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
   });
   assert.equal(boundaryStopped.accepted, false);
   assert.equal(boundaryStopped.eligible, true);
-  assert.equal(boundaryStopped.state.accepted.scenes.opening, undefined);
+  assert.equal(boundaryStopped.state.accepted.scenes.opening, over.take.id);
   assert.equal(boundaryStopped.take.effectiveDuration, 1.4);
   const opening = registerVoiceoverTake({
     manifest: files.manifest,
@@ -275,6 +294,26 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
     close.take.id,
   ]);
   assert.equal(discardedFiles.every((file) => !fs.existsSync(file)), true);
+  const accidentalMaster = registerVoiceoverTake({
+    manifest: files.manifest,
+    kind: 'master',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(1),
+  });
+  const accidentalFiles = [accidentalMaster.take.source, accidentalMaster.take.wave]
+    .map((file) => path.resolve(session.directory, file));
+  assert.equal(accidentalFiles.every((file) => fs.existsSync(file)), true);
+  const deleted = deleteVoiceoverTake(files.manifest, accidentalMaster.take.id);
+  assert.equal(deleted.deleted.kind, 'master');
+  assert.equal(
+    deleted.state.takes.some((take) => take.id === accidentalMaster.take.id),
+    false,
+  );
+  assert.equal(accidentalFiles.every((file) => !fs.existsSync(file)), true);
+  assert.throws(
+    () => deleteVoiceoverTake(files.manifest, opening.take.id),
+    /in-use take must be replaced or cleared/,
+  );
   const result = finishVoiceover(files.manifest, { stdio: 'pipe' });
   assert.equal(fs.existsSync(result.video), true);
   assert.notEqual(result.video, files.manifest.output.video);
@@ -300,10 +339,14 @@ test('serves the muted studio and take audio only through its local token', asyn
   assert.match(html, /data-play-take/);
   assert.match(html, /data-stop-take/);
   assert.match(html, /Use latest eligible takes/);
+  assert.match(html, /Use anyway/);
+  assert.match(html, /data-delete-take/);
   assert.match(html, /Delete other takes after selection/);
   assert.match(html, /Voiceover session saved/);
   assert.match(html, /Finish and verify the saved human-voiceover video/);
   assert.match(html, /Copy handoff prompt/);
+  assert.match(html, /a clickable link to the finished video/);
+  assert.match(html, /Reopen the existing human voiceover studio for this demo/);
   assert.doesNotMatch(html, /<h2>Take history<\/h2>/);
   const unauthorized = await fetch(new URL('/api/session', studio.url));
   assert.equal(unauthorized.status, 403);
@@ -339,7 +382,7 @@ test('serves the muted studio and take audio only through its local token', asyn
     kind: 'scene',
     sceneId: 'opening',
     contentType: 'audio/wav',
-    bytes: waveBuffer(0.8),
+    bytes: waveBuffer(2),
     sessionDir: studio.directory,
   });
   const acceptUrl = new URL('/api/accept', studio.url);
@@ -347,16 +390,38 @@ test('serves the muted studio and take audio only through its local token', asyn
   const accepted = await fetch(acceptUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ takeId: replacement.take.id, cleanup: true }),
+    body: JSON.stringify({
+      takeId: replacement.take.id,
+      cleanup: true,
+      allowOverlong: true,
+    }),
   });
   assert.equal(accepted.status, 200);
-  assert.equal((await accepted.json()).cleanup.deleted, 1);
+  const acceptedBody = await accepted.json();
+  assert.equal(acceptedBody.cleanup.deleted, 1);
+  assert.equal(acceptedBody.selection.overlong, true);
   assert.equal(
     [take.take.source, take.take.wave].every(
       (file) => !fs.existsSync(path.resolve(studio.directory, file)),
     ),
     true,
   );
+  const accidentalMaster = registerVoiceoverTake({
+    manifest: files.manifest,
+    kind: 'master',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(0.5),
+    sessionDir: studio.directory,
+  });
+  const deleteUrl = new URL('/api/delete-take', studio.url);
+  deleteUrl.searchParams.set('token', token);
+  const deleted = await fetch(deleteUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ takeId: accidentalMaster.take.id }),
+  });
+  assert.equal(deleted.status, 200);
+  assert.equal((await deleted.json()).deleted.id, accidentalMaster.take.id);
   await assert.rejects(
     createVoiceoverStudio(files.manifest, { open: false }),
     /already open/,

@@ -10,6 +10,7 @@ import {
   clearVoiceoverAcceptance,
   completeVoiceoverSession,
   createVoiceoverSession,
+  deleteVoiceoverTake,
   readVoiceoverSession,
   registerVoiceoverTake,
   resolveVoiceoverTakeAudio,
@@ -204,7 +205,10 @@ export async function createVoiceoverStudio(manifest, {
           manifest,
           body.takeId,
           sessionDir,
-          { cleanup: body.cleanup === true },
+          {
+            cleanup: body.cleanup === true,
+            allowOverlong: body.allowOverlong === true,
+          },
         ));
         return;
       }
@@ -229,6 +233,15 @@ export async function createVoiceoverStudio(manifest, {
           sceneId: body.sceneId,
           sessionDir,
         }));
+        return;
+      }
+      if (request.method === 'POST' && url.pathname === '/api/delete-take') {
+        const body = JSON.parse((await readBody(request, 1024 * 1024)).toString('utf8'));
+        sendJson(
+          response,
+          200,
+          deleteVoiceoverTake(manifest, body.takeId, sessionDir),
+        );
         return;
       }
       if (request.method === 'POST' && url.pathname === '/api/complete') {

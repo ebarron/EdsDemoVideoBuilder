@@ -278,15 +278,21 @@ Each scene folds its prior takes into a collapsed local history, while full
 takes stay grouped by the master area. An explicit Use latest eligible takes
 action bulk-selects the newest fitting scene takes. An unchecked-by-default
 cleanup option can permanently delete other takes and their audio files when
-an individual or bulk selection is made. Recording itself does not replace
-accepted selections. Overlong speech requires a natural retake; it can be
-auditioned but cannot be used or automatically sped up. The recording toolbar
-stays pinned while long scene lists scroll, and selected-scene recording pins
-the correct prompt across its initial video seek. Saving visibly closes the
+an individual or bulk selection is made. Each take history row also provides
+Delete for removing an accidental scene or full take; an in-use take must first
+be replaced or cleared. Recording itself does not replace accepted selections.
+An overlong take can be auditioned and selected with the
+distinct one-click Use anyway action, which
+shows the exact overage and trims only audio beyond the locked scene boundary.
+It never speeds speech or overlaps the next scene. The recording toolbar stays
+pinned while long scene lists scroll, and selected-scene recording pins the
+correct prompt across its initial video seek. Saving visibly closes the
 recording session; final assembly still uses `voiceover-finish` followed by
 `voiceover-verify`. The saved screen provides a copyable handoff prompt.
 Finishing preserves the session, so revisions can reopen it without
-`--new-session` and regenerate with `voiceover-finish --force`.
+`--new-session` and regenerate with `voiceover-finish --force`. After successful
+finishing, the agent response includes a clickable video link and an exact
+prompt for reopening the preserved studio session.
 
 Starting the studio creates an immutable picture-lock package, including the
 approved video, timeline, script, scene plan, contact sheet, and raw take when

@@ -97,13 +97,18 @@ export function buildVoiceoverPrompts(scenePlan, timeline) {
   });
 }
 
-export function voiceoverTimingFit(duration, windowDuration, tolerance = 0.35) {
+export function voiceoverTimingFit(
+  duration,
+  windowDuration,
+  tolerance = 0.35,
+  boundaryEpsilon = 0.01,
+) {
   const delta = duration - windowDuration;
   return {
     duration,
     windowDuration,
     delta,
-    status: delta > 0
+    status: delta > boundaryEpsilon
       ? 'over'
       : delta > -tolerance
         ? 'tight'
@@ -478,17 +483,10 @@ function takeScope(take) {
   return take.kind === 'master' ? 'master' : `scene:${take.sceneId}`;
 }
 
-function planTakeCleanup(session, selectedTakes) {
-  const selectedByScope = new Map(
-    selectedTakes.map((take) => [takeScope(take), take.id]),
-  );
-  const discarded = session.state.takes.filter((take) => {
-    const selected = selectedByScope.get(takeScope(take));
-    return selected && selected !== take.id;
-  });
+function takeArtifactFiles(session, takes) {
   const takesDirectory = path.resolve(session.directory, 'takes');
   const realTakesDirectory = fs.realpathSync(takesDirectory);
-  const files = discarded.flatMap((take) =>
+  return takes.flatMap((take) =>
     [take.source, take.wave].filter(Boolean).map((relative) => {
       const file = path.resolve(session.directory, relative);
       if (!file.startsWith(`${takesDirectory}${path.sep}`)) {
@@ -501,6 +499,17 @@ function planTakeCleanup(session, selectedTakes) {
       }
       return realFile;
     }));
+}
+
+function planTakeCleanup(session, selectedTakes) {
+  const selectedByScope = new Map(
+    selectedTakes.map((take) => [takeScope(take), take.id]),
+  );
+  const discarded = session.state.takes.filter((take) => {
+    const selected = selectedByScope.get(takeScope(take));
+    return selected && selected !== take.id;
+  });
+  const files = takeArtifactFiles(session, discarded);
   const discardedIds = new Set(discarded.map((take) => take.id));
   return {
     discarded,
@@ -513,16 +522,36 @@ function deleteTakeArtifacts(files) {
   for (const file of files) fs.rmSync(file, { force: true });
 }
 
+export function deleteVoiceoverTake(manifest, takeId, sessionDir = null) {
+  const session = readVoiceoverSession(manifest, sessionDir);
+  const take = session.state.takes.find((entry) => entry.id === takeId);
+  if (!take) throw new Error(`Unknown voiceover take: ${takeId}`);
+  const accepted = take.kind === 'master'
+    ? session.state.accepted.master === take.id
+    : session.state.accepted.scenes[take.sceneId] === take.id;
+  if (accepted) {
+    throw new Error('An in-use take must be replaced or cleared before deletion');
+  }
+  const files = takeArtifactFiles(session, [take]);
+  session.state.takes = session.state.takes.filter((entry) => entry.id !== take.id);
+  writeJson(sessionFile(session.directory), session.state);
+  deleteTakeArtifacts(files);
+  return {
+    deleted: { id: take.id, kind: take.kind, sceneId: take.sceneId },
+    state: session.state,
+  };
+}
+
 export function acceptVoiceoverTake(
   manifest,
   takeId,
   sessionDir = null,
-  { cleanup = false } = {},
+  { cleanup = false, allowOverlong = false } = {},
 ) {
   const session = readVoiceoverSession(manifest, sessionDir);
   const take = session.state.takes.find((entry) => entry.id === takeId);
   if (!take) throw new Error(`Unknown voiceover take: ${takeId}`);
-  if (take.fit.status === 'over') {
+  if (take.fit.status === 'over' && !allowOverlong) {
     throw new Error('An overlong voiceover take cannot be accepted; record a natural retake');
   }
   if (take.kind === 'master') session.state.accepted.master = take.id;
@@ -536,6 +565,10 @@ export function acceptVoiceoverTake(
   return {
     ...session.state,
     cleanup: { deleted: cleanupPlan.discarded.length },
+    selection: {
+      overlong: take.fit.status === 'over',
+      trimmedSeconds: Math.max(0, take.fit.delta),
+    },
   };
 }
 
@@ -644,28 +677,18 @@ export function buildVoiceoverAudioGraph(state) {
       `Record a full master or accept a take for every scene; missing: ${missing.join(', ')}`,
     );
   }
-  if (master && master.effectiveDuration > state.pictureLock.finalDuration) {
-    throw new Error(
-      `Full voiceover exceeds the locked video by ` +
-      `${(master.effectiveDuration - state.pictureLock.finalDuration).toFixed(2)}s; ` +
-      'record a natural retake instead of truncating or speeding it up.',
-    );
-  }
-  for (const { prompt, take } of sceneTakes) {
-    if (take.effectiveDuration > prompt.windowDuration) {
-      throw new Error(
-        `Voiceover take for ${prompt.sceneId} exceeds its window by ` +
-        `${(take.effectiveDuration - prompt.windowDuration).toFixed(2)}s; record a natural retake instead of speeding it up.`,
-      );
-    }
-  }
-
   const inputs = [];
   const filters = [];
   const labels = [];
   if (master) {
     inputs.push(master.wave);
-    let chain = `[1:a]atrim=start=${master.videoOffset},asetpts=PTS-STARTPTS`;
+    const duration = Math.min(
+      master.effectiveDuration,
+      state.pictureLock.finalDuration,
+    );
+    let chain =
+      `[1:a]atrim=start=${master.videoOffset}:duration=${duration},` +
+      'asetpts=PTS-STARTPTS';
     for (const { prompt } of sceneTakes) {
       chain += `,volume=volume=0:enable='between(t,${prompt.start},${prompt.end})'`;
     }
@@ -676,8 +699,9 @@ export function buildVoiceoverAudioGraph(state) {
   for (const [index, { prompt, take }] of sceneTakes.entries()) {
     inputs.push(take.wave);
     const input = inputs.length;
+    const duration = Math.min(take.effectiveDuration, prompt.windowDuration);
     filters.push(
-      `[${input}:a]atrim=start=${take.videoOffset}:duration=${take.effectiveDuration},` +
+      `[${input}:a]atrim=start=${take.videoOffset}:duration=${duration},` +
       `asetpts=PTS-STARTPTS,adelay=${Math.round(prompt.start * 1000)}:all=1[scene${index}]`,
     );
     labels.push(`[scene${index}]`);
@@ -778,6 +802,7 @@ export function finishVoiceover(
         takeId,
         duration: take.effectiveDuration,
         fit: take.fit,
+        trimmedSeconds: Math.max(0, take.effectiveDuration - take.fit.windowDuration),
       }];
     }),
   );
@@ -793,6 +818,15 @@ export function finishVoiceover(
         outputAudioStreamHash,
         contactSheetHash,
         masterTake: session.state.accepted.master,
+        masterTrimmedSeconds: session.state.accepted.master
+          ? Math.max(
+            0,
+            acceptedTake(
+              session.state,
+              session.state.accepted.master,
+            ).effectiveDuration - session.state.pictureLock.finalDuration,
+          )
+          : 0,
         sceneTakes: acceptedScenes,
       },
     },

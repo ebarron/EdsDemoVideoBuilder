@@ -66,9 +66,15 @@ The video is always muted; the synthetic voice is not played.
   choosing **Use** permanently deletes every other take and audio file in that
   scene or full-take group. Bulk selection keeps only the latest eligible take
   in each recorded scene.
-- Overlong takes can be auditioned but cannot be selected. Use a previous take
-  from history to restore it, or clear a scene override to return to the full
-  take.
+- Every take history row also has **Delete** for removing an accidental take,
+  including a full take. Deletion removes both the original recording and
+  normalized WAV after confirmation. An in-use take must first be replaced or
+  cleared.
+- Overlong takes show their exact overage and offer **Use anyway** as a distinct
+  one-click action. This accepts the take and trims audio beyond the locked
+  scene boundary; it never speeds speech or overlaps the next scene. Use a
+  previous take from history to restore it, or clear a scene override to return
+  to the full take.
 - The microphone meter remains visible during setup and recording.
 - A take is discarded if locked playback stalls, pauses, seeks, or changes
   speed, because its audio can no longer be aligned safely.
@@ -79,6 +85,13 @@ The video is always muted; the synthetic voice is not played.
 Finishing preserves the session. To revise the result, reopen the studio
 without `--new-session`, change takes or selections, save again, then rerun
 `voiceover-finish --force` and `voiceover-verify`.
+
+After successful finishing and verification, the agent response must provide a
+clickable link to the finished video and this reusable revision request:
+
+> Reopen the existing human voiceover studio for this demo so I can make
+> changes. Preserve the existing session, takes, and selections; do not use
+> `--new-session`.
 
 Browser capture formats vary. Every uploaded take is retained in its original
 format and normalized to a 48 kHz mono PCM WAV master before it is available
@@ -94,10 +107,11 @@ Scene retakes are classified as:
 - `tight`: ends within 350 ms before the boundary;
 - `over`: crosses the boundary and cannot be accepted.
 
-Finishing rejects an overlong full take or scene retake. It does not speed up
-speech, silently truncate important words, or retime browser motion. Record a
-natural retake. If the narration cannot fit naturally, revise the picture and
-create a new voiceover session.
+Finishing bounds an explicitly accepted overlong take to its locked scene or
+video boundary. **Use anyway** is appropriate for excess stop-button reaction
+time or trailing silence; if speech itself crosses the boundary, record a
+natural retake to avoid cutting words. Finishing never speeds speech, overlaps
+the next scene, or retimes browser motion.
 
 ## Finish and verify
 

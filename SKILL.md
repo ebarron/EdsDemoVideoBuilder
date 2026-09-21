@@ -330,8 +330,15 @@ Offer an unchecked-by-default Delete other takes after selection control. When
 enabled, an individual Use permanently removes every other take and audio file
 in that scene or full-take group; bulk selection does the same per recorded
 scene while retaining its latest eligible take.
-Overlong takes remain playable but require a natural retake; never accept them
-or speed up human speech or browser motion.
+Show Delete on every take-history row, including full takes. After confirmation,
+remove both the original recording and normalized WAV. Never delete an in-use
+take until the user replaces or clears it.
+Overlong takes remain playable and show the exact overage. Offer a distinct
+one-click Use anyway action without a confirmation dialog; accepting it trims
+only audio beyond the locked scene or video boundary. Never speed speech,
+overlap the next scene, or retime browser motion. Explain that this is suitable
+for trailing silence or stop-button reaction time, while speech crossing the
+boundary should receive a natural retake to avoid cutting words.
 
 Saving must present an unmistakable completed state, stop the studio server,
 and provide a copyable prompt asking the agent to finish, verify, open the
@@ -344,6 +351,14 @@ capture takes:
 node scripts/demo.mjs voiceover-finish --manifest path/to/demo.yaml
 node scripts/demo.mjs voiceover-verify --manifest path/to/demo.yaml
 ```
+
+After finishing and verification succeed, the response must include:
+
+1. a clickable link to the finished human-voiceover video; and
+2. this exact reusable instruction:
+   “Reopen the existing human voiceover studio for this demo so I can make
+   changes. Preserve the existing session, takes, and selections; do not use
+   `--new-session`.”
 
 The session preserves an immutable picture-lock package and the synthetic
 outputs. Human artifacts use separate `-human` names. If the picture changed,

@@ -65,7 +65,7 @@ export function voiceoverStudioHtml(token) {
       <h1>Voiceover session saved</h1>
       <p>The recording studio is closed and your selected takes are preserved.</p>
       <p>Copy and send this prompt to your agent:</p>
-      <textarea id="handoff-prompt" readonly>Finish and verify the saved human-voiceover video, then open the result for review. Preserve the existing voiceover session and selected takes so I can reopen it for revisions.</textarea>
+      <textarea id="handoff-prompt" readonly>Finish and verify the saved human-voiceover video, then open the result for review. Preserve the existing voiceover session and selected takes so I can reopen it for revisions. When complete, respond with: 1) a clickable link to the finished video; and 2) this exact revision prompt: "Reopen the existing human voiceover studio for this demo so I can make changes. Preserve the existing session, takes, and selections; do not use --new-session."</textarea>
       <button id="copy-handoff" class="secondary">Copy handoff prompt</button>
       <div id="copy-status"></div>
       <p>You can close this tab after copying the prompt.</p>
@@ -300,13 +300,19 @@ export function voiceoverStudioHtml(token) {
         if (acceptedTake) {
           fit = '<span class="pill ' + acceptedTake.fit.status + '">in use · ' +
             acceptedTake.effectiveDuration.toFixed(1) + '/' +
-            prompt.windowDuration.toFixed(1) + 's</span>';
+            prompt.windowDuration.toFixed(1) + 's' +
+            (acceptedTake.fit.status === 'over'
+              ? ' · trims ' + Math.max(0, acceptedTake.fit.delta).toFixed(2) + 's'
+              : '') + '</span>';
         }
         if (latestTake && latestTake.id !== acceptedTakeId) {
           const latestFit = '<span class="pill ' + latestTake.fit.status +
             '">review latest · ' +
             latestTake.effectiveDuration.toFixed(1) + '/' +
-            prompt.windowDuration.toFixed(1) + 's</span>';
+            prompt.windowDuration.toFixed(1) + 's' +
+            (latestTake.fit.status === 'over'
+              ? ' · over by ' + Math.max(0, latestTake.fit.delta).toFixed(2) + 's'
+              : '') + '</span>';
           fit = acceptedTake ? fit + latestFit : latestFit;
         }
         const controls = reviewTake
@@ -317,10 +323,13 @@ export function voiceoverStudioHtml(token) {
             '" aria-label="Stop latest take for ' + escapeHtml(prompt.title) +
             '" disabled>Stop</button>' +
             '<button class="secondary" data-take="' + escapeHtml(reviewTake.id) + '"' +
-            (reviewTake.fit.status === 'over' || reviewTake.id === acceptedTakeId
-              ? ' disabled'
-              : '') + '>' +
-            (reviewTake.id === acceptedTakeId ? 'In use' : 'Use') +
+            (reviewTake.fit.status === 'over'
+              ? ' data-overlong="' + Math.max(0, reviewTake.fit.delta) + '"'
+              : '') +
+            (reviewTake.id === acceptedTakeId ? ' disabled' : '') + '>' +
+            (reviewTake.id === acceptedTakeId
+              ? 'In use'
+              : reviewTake.fit.status === 'over' ? 'Use anyway' : 'Use') +
             '</button></span>'
           : '';
         const history = sceneTakes.length
@@ -361,6 +370,7 @@ export function voiceoverStudioHtml(token) {
       for (const button of document.querySelectorAll('[data-take]')) {
         button.addEventListener('click', async () => {
           if (preparing || recording || uploading) return;
+          const allowOverlong = button.hasAttribute('data-overlong');
           stopTakePlayback();
           const response = await fetch(withToken('/api/accept'), {
             method: 'POST',
@@ -368,6 +378,7 @@ export function voiceoverStudioHtml(token) {
             body: JSON.stringify({
               takeId: button.dataset.take,
               cleanup: cleanupTakes.checked,
+              allowOverlong,
             }),
           });
           if (!response.ok) {
@@ -377,10 +388,32 @@ export function voiceoverStudioHtml(token) {
           const result = await response.json();
           await refresh();
           status.textContent = 'Take accepted for the final human voiceover.' +
+            (result.selection.overlong
+              ? ' The final ' + result.selection.trimmedSeconds.toFixed(2) +
+                ' seconds will be trimmed at the locked boundary.'
+              : '') +
             (result.cleanup.deleted
               ? ' Deleted ' + result.cleanup.deleted + ' other take' +
                 (result.cleanup.deleted === 1 ? '.' : 's.')
               : '');
+        });
+      }
+      for (const button of document.querySelectorAll('[data-delete-take]')) {
+        button.addEventListener('click', async () => {
+          if (preparing || recording || uploading) return;
+          if (!window.confirm('Permanently delete this recorded take?')) return;
+          stopTakePlayback();
+          const response = await fetch(withToken('/api/delete-take'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ takeId: button.dataset.deleteTake }),
+          });
+          if (!response.ok) {
+            status.textContent = await response.text();
+            return;
+          }
+          await refresh();
+          status.textContent = 'Recorded take deleted.';
         });
       }
       for (const button of document.querySelectorAll('[data-clear-master], [data-clear-scene]')) {
@@ -413,13 +446,24 @@ export function voiceoverStudioHtml(token) {
       const takeId = escapeHtml(take.id);
       return '<div class="take"><span>' +
         take.effectiveDuration.toFixed(1) + 's · ' + escapeHtml(take.fit.status) +
+        (take.fit.status === 'over'
+          ? ' by ' + Math.max(0, take.fit.delta).toFixed(2) + 's'
+          : '') +
         (accepted ? '<span class="pill">in use</span>' : '') +
         '</span><span class="take-actions">' +
         '<button class="secondary" data-play-take="' + takeId + '">Play</button>' +
         '<button class="secondary" data-stop-take="' + takeId + '" disabled>Stop</button>' +
         '<button class="secondary" data-take="' + takeId + '"' +
-        (take.fit.status === 'over' || accepted ? ' disabled' : '') +
-        '>' + (accepted ? 'In use' : 'Use') + '</button>' +
+        (take.fit.status === 'over'
+          ? ' data-overlong="' + Math.max(0, take.fit.delta) + '"'
+          : '') +
+        (accepted ? ' disabled' : '') +
+        '>' + (accepted
+          ? 'In use'
+          : take.fit.status === 'over' ? 'Use anyway' : 'Use') + '</button>' +
+        '<button class="danger" data-delete-take="' + takeId + '"' +
+        (accepted ? ' disabled title="Replace or clear this in-use take first"' : '') +
+        '>Delete</button>' +
         (take.kind === 'scene' && accepted
           ? '<button class="secondary" data-clear-scene="' + escapeHtml(take.sceneId) +
             '">Clear</button>'
@@ -678,8 +722,9 @@ export function voiceoverStudioHtml(token) {
             ? 'Take saved but not selected: ' + result.take.fit.status +
               ' (' + result.take.effectiveDuration.toFixed(1) +
               's). Play it, then choose Use to accept it.'
-            : 'Take saved but cannot be used because it is overlong (' +
-              result.take.effectiveDuration.toFixed(1) + 's). You can play it before retaking.';
+            : 'Take saved as overlong (' +
+              result.take.effectiveDuration.toFixed(1) +
+              's). Play it, then choose Use anyway to trim its tail at the locked boundary.';
         }
       } catch (error) {
         status.textContent = 'Take failed: ' + error.message;

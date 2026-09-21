@@ -107,6 +107,8 @@ try {
   const pageErrors = [];
   let smokeAccepted = false;
   let cleanupRequested = false;
+  let allowOverlongRequested = false;
+  let deletedTakeId = null;
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.route('http://voiceover-smoke.test/**', async (route) => {
     const url = new URL(route.request().url());
@@ -121,16 +123,35 @@ try {
         body: JSON.stringify({
           pictureLock: { finalDuration: 24 },
           prompts: smokePrompts,
-          takes: [{
-            id: 'intro-take',
-            kind: 'scene',
-            sceneId: 'scene-0',
-            effectiveDuration: 0.8,
-            fit: { status: 'fits' },
-          }],
+          takes: [
+            ...(!deletedTakeId ? [{
+              id: 'accidental-master',
+              kind: 'master',
+              sceneId: null,
+              effectiveDuration: 3,
+              fit: { status: 'fits', delta: -21, windowDuration: 24 },
+            }] : []),
+            {
+              id: 'intro-take',
+              kind: 'scene',
+              sceneId: 'scene-0',
+              effectiveDuration: 0.8,
+              fit: { status: 'fits', delta: -0.2, windowDuration: 1 },
+            },
+            {
+              id: 'storage-over',
+              kind: 'scene',
+              sceneId: 'scene-1',
+              effectiveDuration: 1.2,
+              fit: { status: 'over', delta: 0.2, windowDuration: 1 },
+            },
+          ],
           accepted: {
             master: null,
-            scenes: smokeAccepted ? { 'scene-0': 'intro-take' } : {},
+            scenes: {
+              ...(smokeAccepted ? { 'scene-0': 'intro-take' } : {}),
+              ...(allowOverlongRequested ? { 'scene-1': 'storage-over' } : {}),
+            },
           },
         }),
       });
@@ -145,6 +166,23 @@ try {
           selected: 1,
           deleted: 0,
         }),
+      });
+    } else if (url.pathname === '/api/accept') {
+      const body = route.request().postDataJSON();
+      allowOverlongRequested = body.allowOverlong === true;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          cleanup: { deleted: 0 },
+          selection: { overlong: true, trimmedSeconds: 0.2 },
+        }),
+      });
+    } else if (url.pathname === '/api/delete-take') {
+      const body = route.request().postDataJSON();
+      deletedTakeId = body.takeId;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ deleted: { id: deletedTakeId, kind: 'master' } }),
       });
     } else if (url.pathname === '/api/complete') {
       await route.fulfill({
@@ -177,7 +215,7 @@ try {
   const cleanupTakes = page.getByLabel('Delete other takes after selection');
   assert.equal(await cleanupTakes.isChecked(), false);
   assert.equal(await page.getByRole('heading', { name: 'Take history' }).count(), 0);
-  assert.equal(await page.getByText('Take history (1)').isVisible(), true);
+  assert.equal(await page.getByText('Take history (1)').first().isVisible(), true);
   await playLatest.click();
   await page.waitForFunction(() =>
     !document.querySelector('[aria-label="Stop latest take for Intro"]').disabled);
@@ -207,12 +245,34 @@ try {
   });
   assert.equal(await page.locator('#prompt-title').textContent(), 'Storage');
   assert.equal(await page.locator('#prompt-text').textContent(), 'Narration for scene 2.');
+  const useAnyway = page.locator('[data-take="storage-over"]').first();
+  assert.equal(await useAnyway.textContent(), 'Use anyway');
+  await useAnyway.click();
+  await page.waitForFunction(() =>
+    document.getElementById('status').textContent.includes('will be trimmed'));
+  assert.equal(allowOverlongRequested, true);
+  await page.getByText('Full-take history (1)').click();
+  const deleteMaster = page.locator('[data-delete-take="accidental-master"]');
+  assert.equal(await deleteMaster.isEnabled(), true);
+  page.once('dialog', (dialog) => dialog.accept());
+  await deleteMaster.click();
+  await page.waitForFunction(() =>
+    document.getElementById('status').textContent.includes('Recorded take deleted'));
+  assert.equal(deletedTakeId, 'accidental-master');
   await page.getByRole('button', { name: 'Save and close studio' }).click();
   await page.getByRole('heading', { name: 'Voiceover session saved' })
     .waitFor({ state: 'visible' });
   assert.match(
     await page.locator('#handoff-prompt').inputValue(),
     /Finish and verify the saved human-voiceover video/,
+  );
+  assert.match(
+    await page.locator('#handoff-prompt').inputValue(),
+    /clickable link to the finished video/,
+  );
+  assert.match(
+    await page.locator('#handoff-prompt').inputValue(),
+    /Reopen the existing human voiceover studio for this demo/,
   );
   assert.equal(
     await page.getByRole('button', { name: 'Copy handoff prompt' }).isEnabled(),
