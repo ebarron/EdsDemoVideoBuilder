@@ -210,7 +210,10 @@ function rawVideoPath(manifest) {
   return fs.existsSync(video) ? video : null;
 }
 
-export function createVoiceoverSession(manifest, { newSession = false } = {}) {
+export function createVoiceoverSession(
+  manifest,
+  { newSession = false, activate = true } = {},
+) {
   const paths = voiceoverPaths(manifest);
   requireFile(manifest.output.video, 'Approved synthetic video');
   requireFile(manifest.output.timeline, 'Finished timeline');
@@ -319,10 +322,232 @@ export function createVoiceoverSession(manifest, { newSession = false } = {}) {
     accepted: { master: null, scenes: {} },
   };
   writeJson(sessionFile(directory), state);
-  writeJson(currentSessionFile(paths.root), {
-    session: path.relative(paths.root, directory),
-  });
+  if (activate) {
+    writeJson(currentSessionFile(paths.root), {
+      session: path.relative(paths.root, directory),
+    });
+  }
   return { paths, directory, state, created: true };
+}
+
+function assertRebasePromptCompatibility(previous, current) {
+  if (previous.length !== current.length) {
+    throw new Error(
+      `Voiceover rebase requires the same narrated scenes; ` +
+      `previous=${previous.length}, current=${current.length}`,
+    );
+  }
+  for (let index = 0; index < previous.length; index += 1) {
+    const before = previous[index];
+    const after = current[index];
+    if (before.sceneId !== after.sceneId || before.text !== after.text) {
+      throw new Error(
+        `Voiceover rebase requires unchanged scene order and spoken text; ` +
+        `scene ${index + 1} changed from ${before.sceneId} to ${after.sceneId}`,
+      );
+    }
+  }
+}
+
+function rebaseTimingChanges(previous, current) {
+  return current.flatMap((prompt, index) => {
+    const before = previous[index];
+    const startDelta = prompt.start - before.start;
+    const endDelta = prompt.end - before.end;
+    const windowDelta = prompt.windowDuration - before.windowDuration;
+    if (
+      Math.abs(startDelta) <= 0.001 &&
+      Math.abs(endDelta) <= 0.001 &&
+      Math.abs(windowDelta) <= 0.001
+    ) {
+      return [];
+    }
+    return [{
+      sceneId: prompt.sceneId,
+      title: prompt.title,
+      previous: {
+        start: before.start,
+        end: before.end,
+        windowDuration: before.windowDuration,
+      },
+      current: {
+        start: prompt.start,
+        end: prompt.end,
+        windowDuration: prompt.windowDuration,
+      },
+      deltas: { start: startDelta, end: endDelta, window: windowDelta },
+    }];
+  });
+}
+
+function verifiedTakeArtifacts(session) {
+  const takesRoot = path.resolve(session.directory, 'takes');
+  const realTakesRoot = fs.realpathSync(takesRoot);
+  const artifacts = new Map();
+  for (const take of session.state.takes) {
+    for (const field of ['source', 'wave']) {
+      const relative = take[field];
+      if (!relative) continue;
+      const file = path.resolve(session.directory, relative);
+      if (!file.startsWith(`${takesRoot}${path.sep}`)) {
+        throw new Error(`Voiceover take path escapes its session: ${take.id}`);
+      }
+      requireFile(file, `Voiceover take ${take.id} ${field}`);
+      const realFile = fs.realpathSync(file);
+      if (!realFile.startsWith(`${realTakesRoot}${path.sep}`)) {
+        throw new Error(`Voiceover take path escapes its session: ${take.id}`);
+      }
+      if (field === 'wave' && (!take.waveHash || hashFile(realFile) !== take.waveHash)) {
+        throw new Error(`Voiceover take changed after recording: ${take.id}`);
+      }
+      artifacts.set(relative, realFile);
+    }
+  }
+  return artifacts;
+}
+
+function copyRebasedTakeArtifacts(artifacts, destination) {
+  const takesRoot = path.resolve(destination, 'takes');
+  for (const [relative, source] of artifacts) {
+    const target = path.resolve(destination, relative);
+    if (!target.startsWith(`${takesRoot}${path.sep}`)) {
+      throw new Error(`Rebased voiceover take escapes its session: ${relative}`);
+    }
+    fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+    fs.copyFileSync(source, target, fs.constants.COPYFILE_EXCL);
+    fs.chmodSync(target, 0o600);
+  }
+}
+
+export function rebaseVoiceoverSession(
+  manifest,
+  { allowStudioLock = false } = {},
+) {
+  const paths = voiceoverPaths(manifest);
+  const previousDirectory = readCurrentDirectory(paths.root);
+  if (!previousDirectory) {
+    throw new Error(`No voiceover session exists for ${manifest.id}`);
+  }
+  if (
+    !allowStudioLock &&
+    fs.existsSync(path.join(previousDirectory, '.studio.lock'))
+  ) {
+    throw new Error('Close the current voiceover studio before rebasing its session');
+  }
+  const previous = readVoiceoverSession(manifest, previousDirectory);
+  verifyPictureLock(previous);
+  verifyAcceptedTakes(previous);
+  const artifacts = verifiedTakeArtifacts(previous);
+
+  requireFile(manifest.output.video, 'Revised synthetic video');
+  requireFile(manifest.output.timeline, 'Revised finished timeline');
+  requireFile(manifest.output.contactSheet, 'Revised synthetic contact sheet');
+  requireFile(manifest.scenePlan, 'Current scene plan');
+  requireFile(manifest.script, 'Current Markdown narration');
+  const sourceHash = hashFile(manifest.output.video);
+  if (sourceHash === previous.state.pictureLock.sourceHash) {
+    throw new Error(
+      'The approved video already matches the current voiceover picture lock; ' +
+      'open the studio without --rebase',
+    );
+  }
+
+  const lockedScript = path.join(
+    previous.directory,
+    previous.state.pictureLock.script ?? 'picture-lock/script.md',
+  );
+  requireFile(lockedScript, 'Locked Markdown narration');
+  if (hashFile(manifest.script) !== hashFile(lockedScript)) {
+    throw new Error('Voiceover rebase requires the Markdown script to be unchanged');
+  }
+
+  const timeline = JSON.parse(fs.readFileSync(manifest.output.timeline, 'utf8'));
+  const scenePlan = JSON.parse(fs.readFileSync(manifest.scenePlan, 'utf8'));
+  if (!(timeline.meta?.finalDuration > 0)) {
+    throw new Error('Revised finished timeline is missing a positive finalDuration');
+  }
+  const prompts = buildVoiceoverPrompts(scenePlan, timeline);
+  assertRebasePromptCompatibility(previous.state.prompts, prompts);
+  const timingChanges = rebaseTimingChanges(previous.state.prompts, prompts);
+  const sceneStartsShifted = timingChanges.some(
+    (change) => Math.abs(change.deltas.start) > 0.01,
+  );
+  const accepted = JSON.parse(JSON.stringify(previous.state.accepted));
+  let masterSelectionCleared = false;
+  if (accepted.master && sceneStartsShifted) {
+    const missingSceneTakes = prompts
+      .filter((prompt) => !accepted.scenes[prompt.sceneId])
+      .map((prompt) => prompt.title);
+    if (missingSceneTakes.length) {
+      throw new Error(
+        'An accepted full take cannot be safely rebased across shifted scene starts. ' +
+        `Accept individual scene takes first for: ${missingSceneTakes.join(', ')}`,
+      );
+    }
+    accepted.master = null;
+    masterSelectionCleared = true;
+  }
+
+  const promptById = new Map(prompts.map((prompt) => [prompt.sceneId, prompt]));
+  const takes = previous.state.takes.map((take) => {
+    const windowDuration = take.kind === 'master'
+      ? timeline.meta.finalDuration
+      : promptById.get(take.sceneId).windowDuration;
+    return {
+      ...take,
+      fit: voiceoverTimingFit(take.effectiveDuration, windowDuration),
+    };
+  });
+  const fitChanges = takes.flatMap((take, index) => {
+    const before = previous.state.takes[index].fit;
+    if (
+      before?.status === take.fit.status &&
+      Math.abs((before?.windowDuration ?? 0) - take.fit.windowDuration) <= 0.001
+    ) {
+      return [];
+    }
+    return [{
+      takeId: take.id,
+      sceneId: take.sceneId,
+      previous: before ?? null,
+      current: take.fit,
+    }];
+  });
+
+  let created;
+  try {
+    created = createVoiceoverSession(manifest, {
+      newSession: true,
+      activate: false,
+    });
+    copyRebasedTakeArtifacts(artifacts, created.directory);
+    created.state.takes = takes;
+    created.state.accepted = accepted;
+    created.state.prompts = prompts;
+    created.state.completedAt = null;
+    created.state.completionWarnings = uncoveredVoiceoverPrompts(created.state)
+      .map((prompt) => ({ sceneId: prompt.sceneId, title: prompt.title }));
+    created.state.rebase = {
+      sourceSession: previous.state.id,
+      sourcePictureLockHash: previous.state.pictureLock.sourceHash,
+      rebasedAt: new Date().toISOString(),
+      timingChanges,
+      fitChanges,
+      masterSelectionCleared,
+    };
+    writeJson(sessionFile(created.directory), created.state);
+    writeJson(currentSessionFile(paths.root), {
+      session: path.relative(paths.root, created.directory),
+    });
+  } catch (error) {
+    if (created?.directory) fs.rmSync(created.directory, { recursive: true, force: true });
+    throw error;
+  }
+  return {
+    ...created,
+    rebased: true,
+    rebase: created.state.rebase,
+  };
 }
 
 function mediaExtension(contentType) {
@@ -626,9 +851,30 @@ export function clearVoiceoverAcceptance(
   return session.state;
 }
 
-export function completeVoiceoverSession(manifest, sessionDir = null) {
+export function uncoveredVoiceoverPrompts(state) {
+  if (state.accepted.master) return [];
+  return state.prompts.filter((prompt) => !state.accepted.scenes[prompt.sceneId]);
+}
+
+export function completeVoiceoverSession(
+  manifest,
+  sessionDir = null,
+  { allowMissing = false } = {},
+) {
   const session = readVoiceoverSession(manifest, sessionDir);
+  const uncovered = uncoveredVoiceoverPrompts(session.state);
+  if (uncovered.length && !allowMissing) {
+    throw new Error(
+      `${uncovered.length} voiceover segment${uncovered.length === 1 ? '' : 's'} ` +
+      `do not have an in-use voice track: ` +
+      uncovered.map((prompt) => prompt.title).join(', '),
+    );
+  }
   session.state.completedAt = new Date().toISOString();
+  session.state.completionWarnings = uncovered.map((prompt) => ({
+    sceneId: prompt.sceneId,
+    title: prompt.title,
+  }));
   writeJson(sessionFile(session.directory), session.state);
   return session.state;
 }

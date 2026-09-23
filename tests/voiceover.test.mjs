@@ -17,11 +17,31 @@ import {
   deleteVoiceoverTake,
   finishVoiceover,
   readVoiceoverSession,
+  rebaseVoiceoverSession,
   registerVoiceoverTake,
+  uncoveredVoiceoverPrompts,
   verifyVoiceoverArtifacts,
   voiceoverPaths,
   voiceoverTimingFit,
 } from '../runtime/voiceover.mjs';
+
+function writeVideo(file, { color = 'blue', duration = 2 } = {}) {
+  const generated = spawnSync(ffmpegStatic, [
+    '-v', 'error',
+    '-y',
+    '-f', 'lavfi',
+    '-i', `color=c=${color}:s=320x240:r=25:d=${duration}`,
+    '-f', 'lavfi',
+    '-i', 'anullsrc=r=48000:cl=stereo',
+    '-t', String(duration),
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac',
+    '-movflags', '+faststart',
+    file,
+  ], { encoding: 'utf8' });
+  assert.equal(generated.status, 0, generated.stderr);
+}
 
 function fixture({ validVideo = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'demo-voiceover-test-'));
@@ -31,21 +51,7 @@ function fixture({ validVideo = false } = {}) {
   fs.mkdirSync(workDir);
   const video = path.join(output, 'sample.mp4');
   if (validVideo) {
-    const generated = spawnSync(ffmpegStatic, [
-      '-v', 'error',
-      '-y',
-      '-f', 'lavfi',
-      '-i', 'color=c=blue:s=320x240:r=25:d=2',
-      '-f', 'lavfi',
-      '-i', 'anullsrc=r=48000:cl=stereo',
-      '-t', '2',
-      '-c:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      '-c:a', 'aac',
-      '-movflags', '+faststart',
-      video,
-    ], { encoding: 'utf8' });
-    assert.equal(generated.status, 0, generated.stderr);
+    writeVideo(video);
   } else {
     fs.writeFileSync(video, 'locked-video');
   }
@@ -178,6 +184,133 @@ test('creates an immutable picture-lock session and preserves prior sessions', (
   assert.match(voiceoverPaths(files.manifest).video, /sample-human\.mp4$/);
 });
 
+test('rebases scene takes onto unchanged narration with revised timing', () => {
+  const files = fixture({ validVideo: true });
+  const previous = createVoiceoverSession(files.manifest);
+  const opening = registerVoiceoverTake({
+    manifest: files.manifest,
+    kind: 'scene',
+    sceneId: 'opening',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(1),
+  });
+  const close = registerVoiceoverTake({
+    manifest: files.manifest,
+    kind: 'scene',
+    sceneId: 'close',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(0.4),
+  });
+  acceptVoiceoverTake(files.manifest, opening.take.id);
+  acceptVoiceoverTake(files.manifest, close.take.id);
+  const master = registerVoiceoverTake({
+    manifest: files.manifest,
+    kind: 'master',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(1),
+  });
+  acceptVoiceoverTake(files.manifest, master.take.id);
+
+  writeVideo(files.manifest.output.video, { color: 'green', duration: 2.2 });
+  fs.writeFileSync(files.manifest.output.timeline, `${JSON.stringify({
+    meta: {
+      finalDuration: 2.2,
+      viewport: { width: 320, height: 240 },
+      narration: { mode: 'macos-say' },
+    },
+    narrations: [
+      { id: 'opening', finalStart: 0, duration: 1.5 },
+      { id: 'close', finalStart: 1.5, duration: 0.6 },
+    ],
+  })}\n`);
+  fs.writeFileSync(files.manifest.output.contactSheet, 'revised branded frames');
+
+  const rebased = rebaseVoiceoverSession(files.manifest);
+  assert.equal(rebased.rebased, true);
+  assert.notEqual(rebased.directory, previous.directory);
+  assert.equal(fs.existsSync(previous.directory), true);
+  assert.equal(readVoiceoverSession(files.manifest).directory, rebased.directory);
+  assert.deepEqual(
+    rebased.state.takes.map((take) => take.id),
+    [opening.take.id, close.take.id, master.take.id],
+  );
+  assert.equal(rebased.state.accepted.master, null);
+  assert.deepEqual(rebased.state.accepted.scenes, {
+    opening: opening.take.id,
+    close: close.take.id,
+  });
+  assert.equal(rebased.state.takes[0].fit.windowDuration, 1.5);
+  assert.equal(
+    Math.abs(rebased.state.takes[1].fit.windowDuration - 0.7) < 0.000001,
+    true,
+  );
+  assert.equal(rebased.rebase.timingChanges.length, 2);
+  assert.equal(rebased.rebase.masterSelectionCleared, true);
+  assert.deepEqual(rebased.state.completionWarnings, []);
+  for (const take of rebased.state.takes) {
+    assert.equal(fs.existsSync(path.join(rebased.directory, take.wave)), true);
+    assert.equal(fs.existsSync(path.join(previous.directory, take.wave)), true);
+  }
+
+  const finished = finishVoiceover(files.manifest, { stdio: 'pipe' });
+  assert.equal(finished.session, rebased.state.id);
+  assert.equal(verifyVoiceoverArtifacts(files.manifest).session, rebased.state.id);
+});
+
+test('rejects voiceover rebase when narration changes or a shifted master is unsafe', () => {
+  const changedNarration = fixture();
+  const original = createVoiceoverSession(changedNarration.manifest);
+  fs.appendFileSync(changedNarration.manifest.output.video, '-branding');
+  fs.appendFileSync(changedNarration.manifest.script, '\nChanged narration.\n');
+  assert.throws(
+    () => rebaseVoiceoverSession(changedNarration.manifest),
+    /Markdown script to be unchanged/,
+  );
+  assert.equal(readVoiceoverSession(changedNarration.manifest).directory, original.directory);
+
+  fs.writeFileSync(
+    changedNarration.manifest.script,
+    '# Opening\n\nIntroduce the dashboard.\n',
+  );
+  const changedPlan = JSON.parse(
+    fs.readFileSync(changedNarration.manifest.scenePlan, 'utf8'),
+  );
+  changedPlan.scenes[0].cues[0].text = 'Use different spoken words.';
+  fs.writeFileSync(
+    changedNarration.manifest.scenePlan,
+    `${JSON.stringify(changedPlan)}\n`,
+  );
+  assert.throws(
+    () => rebaseVoiceoverSession(changedNarration.manifest),
+    /unchanged scene order and spoken text/,
+  );
+  assert.equal(readVoiceoverSession(changedNarration.manifest).directory, original.directory);
+
+  const shiftedMaster = fixture();
+  const masterSession = createVoiceoverSession(shiftedMaster.manifest);
+  const master = registerVoiceoverTake({
+    manifest: shiftedMaster.manifest,
+    kind: 'master',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(1),
+  });
+  acceptVoiceoverTake(shiftedMaster.manifest, master.take.id);
+  fs.appendFileSync(shiftedMaster.manifest.output.video, '-branding');
+  const shiftedTimeline = JSON.parse(
+    fs.readFileSync(shiftedMaster.manifest.output.timeline, 'utf8'),
+  );
+  shiftedTimeline.narrations[1].finalStart = 1.5;
+  fs.writeFileSync(
+    shiftedMaster.manifest.output.timeline,
+    `${JSON.stringify(shiftedTimeline)}\n`,
+  );
+  assert.throws(
+    () => rebaseVoiceoverSession(shiftedMaster.manifest),
+    /accepted full take cannot be safely rebased/,
+  );
+  assert.equal(readVoiceoverSession(shiftedMaster.manifest).directory, masterSession.directory);
+});
+
 test('builds full-master and scene-override audio without speeding speech', () => {
   const state = {
     pictureLock: { finalDuration: 4 },
@@ -209,6 +342,7 @@ test('builds full-master and scene-override audio without speeding speech', () =
   assert.match(graph.filters.join('\n'), /between\(t,0\.5,2\)/);
   assert.match(graph.filters.join('\n'), /adelay=500:all=1/);
   assert.doesNotMatch(graph.filters.join('\n'), /atempo/);
+  assert.deepEqual(uncoveredVoiceoverPrompts(state), []);
 
   state.takes[1].effectiveDuration = 2;
   state.takes[1].fit = voiceoverTimingFit(2, 1.5);
@@ -216,6 +350,12 @@ test('builds full-master and scene-override audio without speeding speech', () =
   assert.match(trimmed.filters.join('\n'), /atrim=start=0\.05:duration=1\.5/);
   assert.doesNotMatch(trimmed.filters.join('\n'), /atempo/);
   assert.equal(voiceoverTimingFit(1.505, 1.5).status, 'tight');
+  state.accepted.master = null;
+  state.accepted.scenes = {};
+  assert.deepEqual(
+    uncoveredVoiceoverPrompts(state).map((prompt) => prompt.sceneId),
+    ['opening'],
+  );
 });
 
 test('records 48 kHz takes and finishes a separate human-voice video', () => {
@@ -347,6 +487,7 @@ test('serves the muted studio and take audio only through its local token', asyn
   assert.match(html, /Copy handoff prompt/);
   assert.match(html, /a clickable link to the finished video/);
   assert.match(html, /Reopen the existing human voiceover studio for this demo/);
+  assert.doesNotMatch(html, /--new-session/);
   assert.doesNotMatch(html, /<h2>Take history<\/h2>/);
   const unauthorized = await fetch(new URL('/api/session', studio.url));
   assert.equal(unauthorized.status, 403);
@@ -439,11 +580,22 @@ test('serves the muted studio and take audio only through its local token', asyn
     `${newerUrl.origin}/api/session?token=${newerUrl.searchParams.get('token')}`,
   ).then((response) => response.json());
   assert.notEqual(oldSession.id, newerState.id);
-  const completed = await fetch(
+  const blockedCompletion = await fetch(
     `${new URL(studio.url).origin}/api/complete?token=${token}`,
     { method: 'POST' },
   );
+  assert.equal(blockedCompletion.status, 400);
+  assert.match(await blockedCompletion.text(), /do not have an in-use voice track/);
+  const completed = await fetch(
+    `${new URL(studio.url).origin}/api/complete?token=${token}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ allowMissing: true }),
+    },
+  );
   assert.equal(completed.status, 200);
+  assert.equal((await completed.json()).completionWarnings.length, 1);
   assert.equal((await studio.done).completedAt !== null, true);
   await newer.close();
 });

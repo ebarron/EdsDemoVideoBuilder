@@ -41,6 +41,7 @@ export {
   createVoiceoverSession,
   finishVoiceover,
   readVoiceoverSession,
+  rebaseVoiceoverSession,
   voiceoverPaths,
   voiceoverTimingFit,
   voiceoverVerificationManifest,

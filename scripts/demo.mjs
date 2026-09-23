@@ -34,7 +34,8 @@ Usage:
   demo.mjs record --manifest <demo.yaml>
   demo.mjs finish --manifest <demo.yaml> [--force]
   demo.mjs verify --manifest <demo.yaml>
-  demo.mjs voiceover --manifest <demo.yaml> [--new-session] [--no-open]
+  demo.mjs voiceover --manifest <demo.yaml> [--new-session | --rebase]
+                     [--no-open]
                      [--port <number>]
   demo.mjs voiceover-finish --manifest <demo.yaml> [--force]
   demo.mjs voiceover-verify --manifest <demo.yaml>
@@ -54,7 +55,7 @@ function parseArguments(argv) {
     const token = tokens[index];
     if (!token.startsWith('--')) throw new Error(`Unexpected argument: ${token}`);
     const key = token.slice(2);
-    if (['force', 'write', 'check', 'help', 'new-session', 'no-open'].includes(key)) {
+    if (['force', 'write', 'check', 'help', 'new-session', 'rebase', 'no-open'].includes(key)) {
       options[key] = true;
       continue;
     }
@@ -160,6 +161,9 @@ async function main() {
   } else if (command === 'verify') {
     console.log(JSON.stringify(verifyRecording(manifest), null, 2));
   } else if (command === 'voiceover') {
+    if (options['new-session'] && options.rebase) {
+      throw new Error('Choose either --new-session or --rebase, not both');
+    }
     const port = options.port === undefined ? 0 : Number(options.port);
     if (!Number.isInteger(port) || port < 0 || port > 65535) {
       throw new Error('--port must be an integer from 0 through 65535');
@@ -168,12 +172,15 @@ async function main() {
       port,
       open: !options['no-open'],
       newSession: options['new-session'],
+      rebase: options.rebase,
       environment: process.env,
     });
     console.log(JSON.stringify({
       voiceoverStudio: studio.url,
       session: studio.directory,
       created: studio.created,
+      rebased: studio.rebased,
+      rebase: studio.rebase,
       next: 'Record a full take or every scene, then choose Save and close studio.',
     }, null, 2));
     console.log(JSON.stringify(await studio.done, null, 2));

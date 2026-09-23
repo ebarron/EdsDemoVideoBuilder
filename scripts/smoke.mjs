@@ -109,6 +109,7 @@ try {
   let cleanupRequested = false;
   let allowOverlongRequested = false;
   let deletedTakeId = null;
+  let completionAllowedMissing = false;
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.route('http://voiceover-smoke.test/**', async (route) => {
     const url = new URL(route.request().url());
@@ -122,6 +123,10 @@ try {
         contentType: 'application/json',
         body: JSON.stringify({
           pictureLock: { finalDuration: 24 },
+          rebase: {
+            timingChanges: [{ sceneId: 'scene-0' }, { sceneId: 'scene-1' }],
+            masterSelectionCleared: true,
+          },
           prompts: smokePrompts,
           takes: [
             ...(!deletedTakeId ? [{
@@ -185,9 +190,17 @@ try {
         body: JSON.stringify({ deleted: { id: deletedTakeId, kind: 'master' } }),
       });
     } else if (url.pathname === '/api/complete') {
+      const body = route.request().postDataJSON();
+      completionAllowedMissing = body.allowMissing === true;
       await route.fulfill({
         contentType: 'application/json',
-        body: JSON.stringify({ completedAt: new Date().toISOString() }),
+        body: JSON.stringify({
+          completedAt: new Date().toISOString(),
+          completionWarnings: smokePrompts.slice(2).map((prompt) => ({
+            sceneId: prompt.sceneId,
+            title: prompt.title,
+          })),
+        }),
       });
     } else if (url.pathname === '/api/take-audio') {
       await route.fulfill({ contentType: 'audio/wav', body: waveBuffer() });
@@ -205,6 +218,10 @@ try {
   assert.equal(await page.getByLabel('Microphone').isVisible(), true);
   assert.equal(await page.locator('video').evaluate((element) => element.muted), true);
   assert.equal(await page.locator('#take-player').count(), 1);
+  assert.match(
+    await page.locator('#rebase-notice').textContent(),
+    /Reused 3 recorded takes on the revised video/,
+  );
   const playLatest = page.getByRole('button', { name: 'Play latest take for Intro' });
   const stopLatest = page.getByRole('button', { name: 'Stop latest take for Intro' });
   assert.equal(await playLatest.isVisible(), true);
@@ -259,20 +276,34 @@ try {
   await page.waitForFunction(() =>
     document.getElementById('status').textContent.includes('Recorded take deleted'));
   assert.equal(deletedTakeId, 'accidental-master');
-  await page.getByRole('button', { name: 'Save and close studio' }).click();
-  await page.getByRole('heading', { name: 'Voiceover session saved' })
+  const saveAndClose = page.getByRole('button', { name: 'Save and close studio' });
+  page.once('dialog', (dialog) => {
+    assert.match(dialog.message(), /22 segments do not have an in-use voice track/);
+    dialog.dismiss();
+  });
+  await saveAndClose.click();
+  await page.waitForFunction(() =>
+    document.getElementById('status').textContent.includes('Studio remains open'));
+  assert.equal(completionAllowedMissing, false);
+  page.once('dialog', (dialog) => {
+    assert.match(dialog.message(), /22 segments do not have an in-use voice track/);
+    dialog.accept();
+  });
+  await saveAndClose.click();
+  assert.equal(completionAllowedMissing, true);
+  await page.getByRole('heading', { name: 'Session saved with missing voice tracks' })
     .waitFor({ state: 'visible' });
   assert.match(
     await page.locator('#handoff-prompt').inputValue(),
-    /Finish and verify the saved human-voiceover video/,
-  );
-  assert.match(
-    await page.locator('#handoff-prompt').inputValue(),
-    /clickable link to the finished video/,
+    /complete these segments without an in-use voice track/,
   );
   assert.match(
     await page.locator('#handoff-prompt').inputValue(),
     /Reopen the existing human voiceover studio for this demo/,
+  );
+  assert.doesNotMatch(
+    await page.locator('#handoff-prompt').inputValue(),
+    /--new-session/,
   );
   assert.equal(
     await page.getByRole('button', { name: 'Copy handoff prompt' }).isEnabled(),

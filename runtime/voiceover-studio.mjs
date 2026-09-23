@@ -12,6 +12,7 @@ import {
   createVoiceoverSession,
   deleteVoiceoverTake,
   readVoiceoverSession,
+  rebaseVoiceoverSession,
   registerVoiceoverTake,
   resolveVoiceoverTakeAudio,
 } from './voiceover.mjs';
@@ -133,11 +134,31 @@ export async function createVoiceoverStudio(manifest, {
   port = 0,
   open = true,
   newSession = false,
+  rebase = false,
   environment = process.env,
 } = {}) {
-  const prepared = createVoiceoverSession(manifest, { newSession });
+  if (newSession && rebase) {
+    throw new Error('Choose either a new voiceover session or rebase, not both');
+  }
+  let prepared;
+  let releaseStudioLock;
+  if (rebase) {
+    const source = readVoiceoverSession(manifest);
+    const releaseSourceLock = acquireStudioLock(source.directory);
+    try {
+      prepared = rebaseVoiceoverSession(
+        manifest,
+        { allowStudioLock: true },
+      );
+      releaseStudioLock = acquireStudioLock(prepared.directory);
+    } finally {
+      releaseSourceLock();
+    }
+  } else {
+    prepared = createVoiceoverSession(manifest, { newSession });
+    releaseStudioLock = acquireStudioLock(prepared.directory);
+  }
   const sessionDir = prepared.directory;
-  const releaseStudioLock = acquireStudioLock(sessionDir);
   const token = crypto.randomBytes(24).toString('hex');
   let finish;
   const done = new Promise((resolve) => {
@@ -245,8 +266,17 @@ export async function createVoiceoverStudio(manifest, {
         return;
       }
       if (request.method === 'POST' && url.pathname === '/api/complete') {
-        const state = completeVoiceoverSession(manifest, sessionDir);
-        sendJson(response, 200, { completedAt: state.completedAt });
+        const bytes = await readBody(request, 1024 * 1024);
+        const body = bytes.length ? JSON.parse(bytes.toString('utf8')) : {};
+        const state = completeVoiceoverSession(
+          manifest,
+          sessionDir,
+          { allowMissing: body.allowMissing === true },
+        );
+        sendJson(response, 200, {
+          completedAt: state.completedAt,
+          completionWarnings: state.completionWarnings,
+        });
         if (!closing) {
           closing = true;
           setTimeout(() => server.close(() => {
@@ -290,6 +320,8 @@ export async function createVoiceoverStudio(manifest, {
     url,
     directory: prepared.directory,
     created: prepared.created,
+    rebased: prepared.rebased === true,
+    rebase: prepared.rebase ?? null,
     done,
     close: () => new Promise((resolve) => {
       if (closing) {

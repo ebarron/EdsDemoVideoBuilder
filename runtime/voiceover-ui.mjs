@@ -32,6 +32,7 @@ export function voiceoverStudioHtml(token) {
     .meter { height: 10px; background: #242a36; border-radius: 999px; overflow: hidden; margin: 14px 0; }
     .meter > div { height: 100%; width: 0; background: linear-gradient(90deg, #44d287, #f7d154, #ff5d72); transition: width 60ms linear; }
     .status { min-height: 42px; color: #b9c2d3; font-size: 14px; margin: 12px 0; white-space: pre-wrap; }
+    .rebase-notice { margin: 10px 0 14px; padding: 10px; border: 1px solid #38567d; border-radius: 8px; background: #17243a; color: #c8dcff; font-size: 13px; line-height: 1.4; }
     .scene-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 7px; margin: 7px 0; }
     .scene { width: 100%; text-align: left; background: #1b202b; margin: 0; border: 1px solid transparent; }
     .scene.selected { border-color: #6da0ff; background: #202b40; }
@@ -62,10 +63,10 @@ export function voiceoverStudioHtml(token) {
   <div id="countdown"></div>
   <div id="completed">
     <div class="saved-card">
-      <h1>Voiceover session saved</h1>
-      <p>The recording studio is closed and your selected takes are preserved.</p>
+      <h1 id="completed-title">Voiceover session saved</h1>
+      <p id="completed-summary">The recording studio is closed and your selected takes are preserved.</p>
       <p>Copy and send this prompt to your agent:</p>
-      <textarea id="handoff-prompt" readonly>Finish and verify the saved human-voiceover video, then open the result for review. Preserve the existing voiceover session and selected takes so I can reopen it for revisions. When complete, respond with: 1) a clickable link to the finished video; and 2) this exact revision prompt: "Reopen the existing human voiceover studio for this demo so I can make changes. Preserve the existing session, takes, and selections; do not use --new-session."</textarea>
+      <textarea id="handoff-prompt" readonly>Finish and verify the saved human-voiceover video, then open the result for review. Preserve the existing voiceover session and selected takes so I can reopen it for revisions. When complete, respond with: 1) a clickable link to the finished video; and 2) this exact revision prompt: "Reopen the existing human voiceover studio for this demo so I can make changes. Preserve my existing session, takes, and selections."</textarea>
       <button id="copy-handoff" class="secondary">Copy handoff prompt</button>
       <div id="copy-status"></div>
       <p>You can close this tab after copying the prompt.</p>
@@ -99,6 +100,7 @@ export function voiceoverStudioHtml(token) {
         </label>
         <div class="meter"><div id="meter-value"></div></div>
         <div class="status" id="status">The video is always muted. Allow microphone access when prompted.</div>
+        <div class="rebase-notice" id="rebase-notice" hidden></div>
       </div>
       <audio id="take-player" preload="none"></audio>
       <div id="master"></div>
@@ -273,6 +275,21 @@ export function voiceoverStudioHtml(token) {
     });
 
     function render() {
+      const rebaseNotice = document.getElementById('rebase-notice');
+      if (session.rebase) {
+        rebaseNotice.hidden = false;
+        rebaseNotice.textContent =
+          'Reused ' + session.takes.length + ' recorded take' +
+          (session.takes.length === 1 ? '' : 's') +
+          ' on the revised video. Recomputed timing for ' +
+          session.rebase.timingChanges.length + ' scene' +
+          (session.rebase.timingChanges.length === 1 ? '' : 's') + '.' +
+          (session.rebase.masterSelectionCleared
+            ? ' The full-take selection was cleared because scene starts shifted.'
+            : '');
+      } else {
+        rebaseNotice.hidden = true;
+      }
       const master = session.takes.find((take) => take.id === session.accepted.master);
       const masterTakes = [...session.takes]
         .reverse()
@@ -806,15 +823,53 @@ export function voiceoverStudioHtml(token) {
         status.textContent = 'Stop and wait for the current take to finish processing.';
         return;
       }
+      const uncovered = session.accepted.master
+        ? []
+        : session.prompts.filter(
+          (prompt) => !session.accepted.scenes[prompt.sceneId],
+        );
+      if (
+        uncovered.length &&
+        !window.confirm(
+          uncovered.length + ' segment' + (uncovered.length === 1 ? '' : 's') +
+          ' do not have an in-use voice track:\\n\\n' +
+          uncovered.map((prompt) => '• ' + prompt.title).join('\\n') +
+          '\\n\\nSave and close the studio anyway?',
+        )
+      ) {
+        status.textContent =
+          'Studio remains open. Select a take for each uncovered segment before closing.';
+        return;
+      }
       try {
-        const response = await fetch(withToken('/api/complete'), { method: 'POST' });
+        const response = await fetch(withToken('/api/complete'), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ allowMissing: uncovered.length > 0 }),
+        });
         if (!response.ok) throw new Error(await response.text());
+        const result = await response.json();
         releaseMicrophone();
         stopTakePlayback();
         video.pause();
         status.textContent = 'Session saved. You may close this window.';
         for (const control of document.querySelectorAll('main button, main input, main select')) {
           control.disabled = true;
+        }
+        if (result.completionWarnings.length) {
+          const missingNames = result.completionWarnings
+            .map((warning) => warning.title)
+            .join(', ');
+          document.getElementById('completed-title').textContent =
+            'Session saved with missing voice tracks';
+          document.getElementById('completed-summary').textContent =
+            result.completionWarnings.length + ' segment' +
+            (result.completionWarnings.length === 1 ? '' : 's') +
+            ' still need an in-use voice track: ' + missingNames + '.';
+          handoffPrompt.value =
+            'Reopen the existing human voiceover studio for this demo so I can ' +
+            'complete these segments without an in-use voice track: ' + missingNames +
+            '. Preserve my existing session, takes, and selections.';
         }
         document.getElementById('completed').classList.add('visible');
       } catch (error) {

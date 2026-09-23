@@ -93,6 +93,8 @@ test('skill documents watchable and resilient driver defaults', () => {
     /one-click Use anyway action without a confirmation dialog/,
     /trims\s+only audio beyond the locked scene or video boundary/,
     /Saving must present an unmistakable completed state/,
+    /list every segment without an in-use scene take and ask\s+whether to save anyway/,
+    /server must require the same missing-coverage\s+acknowledgment/,
     /provide a copyable prompt asking the agent to finish, verify, open the\s+result/,
     /Finishing preserves the existing session/,
     /response must include/,
@@ -100,6 +102,12 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Reopen the existing human voiceover studio for this demo/,
     /require an explicit Use action/,
     /Human artifacts use separate `-human` names/,
+    /voiceover --manifest path\/to\/demo\.yaml --rebase/,
+    /Never ask the\s+user to run Node, name `--rebase`, or manually chain workflow commands/,
+    /Treat a natural-language request to update visuals while retaining the user's\s+voice as one complete prompt-driven workflow/,
+    /Markdown script to be byte-for-byte unchanged/,
+    /Place scene takes at the new scene\s+starts/,
+    /Preserve the prior session on every\s+success or failure/,
   ]) {
     assert.match(SKILL, pattern);
   }
@@ -188,8 +196,12 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Record selected scene/,
     /48 kHz mono PCM WAV/,
     /never speeds speech/,
-    /voiceover-finish/,
+    /without asking the user to run a\s+command/,
     /Synthetic outputs are never overwritten/,
+    /Update this demo for the new branding and reuse my existing human voice\s+>\s+recordings/,
+    /one prompt drives the whole\s+workflow/,
+    /copies all take\s+history and selections into a new\s+session/,
+    /continuous full take cannot safely follow shifted scene starts/,
   ]) {
     assert.match(VOICEOVER, pattern);
   }

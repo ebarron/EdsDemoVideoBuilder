@@ -13,11 +13,12 @@ are required.
 
 ## Open the studio
 
-```bash
-node scripts/demo.mjs voiceover --manifest path/to/demo.yaml
-```
+Ask in plain language:
 
-The command copies the approved video and its supporting artifacts into a
+> Open the human voiceover studio for this demo so I can record or revise my
+> narration. Preserve my existing takes and selections.
+
+The skill copies the approved video and its supporting artifacts into a
 timestamped, immutable session, then opens a local teleprompter in the default
 browser. The page is bound to `127.0.0.1` and protected by a random session
 token. Microphone audio and takes stay on the local machine.
@@ -34,12 +35,27 @@ The locked package contains:
 Picture-lock media and source artifacts are copied read-only and recorded in a
 digest manifest. Reopening or finishing rejects changed files.
 
-If the approved video changes, the studio refuses to mix old takes with it.
-Create another timestamped session without deleting the old one:
+If the approved video changes but the Markdown script and spoken scene
+structure are unchanged, rebase the existing takes onto a new immutable
+picture lock by saying:
 
-```bash
-node scripts/demo.mjs voiceover --manifest path/to/demo.yaml --new-session
-```
+> Update this demo for the new branding and reuse my existing human voice
+> recordings. The script has not changed.
+
+Voice reuse is explicit and prompt driven. The guarded operation requires a
+byte-for-byte unchanged Markdown script and the same narrated scene IDs,
+order, and spoken text. It copies all take history and selections into a new
+session, recomputes every fit against the revised scene windows, and leaves
+the prior session untouched. Scene takes are placed at their revised scene
+starts, so small recording-time timing variance does not require rerecording
+the voice.
+
+A continuous full take cannot safely follow shifted scene starts. If starts
+shift, rebase requires accepted scene takes for every narrated segment and
+clears the now-redundant full-take selection. It refuses the operation when a
+shifted full take is still needed for coverage. If the script or spoken scene
+structure changed, ask the skill to update the demo and reopen voice recording.
+It preserves the old session while creating a fresh one for changed narration.
 
 ## Record
 
@@ -80,18 +96,27 @@ The video is always muted; the synthetic voice is not played.
   speed, because its audio can no longer be aligned safely.
 - **Save and close studio** persists choices, ends the local server, and shows
   an unmistakable saved state with a copyable finish-and-verify handoff prompt.
-  It does not assemble the final video; run the finish and verify steps below.
+  It does not assemble the final video in the browser; send the displayed
+  prompt back to the agent, which finishes and verifies it.
+  If there is no accepted full take and any segment lacks an in-use scene take,
+  the studio lists those uncovered segments and asks before closing. Saving
+  anyway produces a reopen-studio handoff instead of claiming the video is
+  ready to finish.
 
-Finishing preserves the session. To revise the result, reopen the studio
-without `--new-session`, change takes or selections, save again, then rerun
-`voiceover-finish --force` and `voiceover-verify`.
+Finishing preserves the session. To revise the result, ask the skill to reopen
+the existing studio while preserving takes and selections. After saving, the
+skill regenerates and verifies the result.
+
+For a visual-only revision such as branding, one prompt drives the whole
+workflow: the skill rerecords and verifies the synthetic video, performs the
+guarded voice reuse, opens the studio to review recalculated fit badges, and
+finishes and verifies after the user saves.
 
 After successful finishing and verification, the agent response must provide a
 clickable link to the finished video and this reusable revision request:
 
 > Reopen the existing human voiceover studio for this demo so I can make
-> changes. Preserve the existing session, takes, and selections; do not use
-> `--new-session`.
+> changes. Preserve my existing session, takes, and selections.
 
 Browser capture formats vary. Every uploaded take is retained in its original
 format and normalized to a 48 kHz mono PCM WAV master before it is available
@@ -115,10 +140,9 @@ the next scene, or retimes browser motion.
 
 ## Finish and verify
 
-```bash
-node scripts/demo.mjs voiceover-finish --manifest path/to/demo.yaml
-node scripts/demo.mjs voiceover-verify --manifest path/to/demo.yaml
-```
+Saving the studio hands control back to the skill. The agent finishes,
+verifies, and opens the human-voice video without asking the user to run a
+command.
 
 The finisher copies the locked H.264 video stream without re-encoding it and
 replaces only the audio. A full take forms the base track; accepted scene
@@ -132,5 +156,6 @@ picture. It also records the finished AAC stream digest so later verification
 detects changed audio.
 
 Human outputs add `-human` to the configured video, timeline, and contact-sheet
-filenames. Synthetic outputs are never overwritten. `--force` applies only to
-the human outputs and must be explicit.
+filenames. Synthetic outputs are never overwritten. When regenerating an
+existing human output, the agent enables overwrite only for those human
+artifacts.

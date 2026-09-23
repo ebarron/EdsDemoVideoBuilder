@@ -91,6 +91,88 @@ new chat or reload Cursor so skills are rediscovered.
 The skill discards failed takes and enforces its write, secret, baseline, and
 restoration safety rules without requiring you to repeat them in every prompt.
 
+## Prompt cookbook
+
+All demo-building interactions are prompt driven. The skill runs its internal
+tools and commands; you do not need to invoke Node scripts or know workflow
+flags. Include a script, manifest, or output path only when the current demo is
+not obvious from the conversation.
+
+### Initialize without recording
+
+> Initialize a new browser demo from `docs/ProductDemoScript.md` against
+> `http://127.0.0.1:5173`. Create the managed demo files, but do not rehearse or
+> record yet.
+
+### Rehearse and repair without recording
+
+> Rehearse the current demo without recording. Inspect the app, repair any
+> failed selectors or timing boundaries, verify restoration, and tell me what
+> remains before a production take.
+
+### Record a finished synthetic-voice demo
+
+> Record the current demo with the default synthetic voice. Internally verify
+> and repair the browser flow, then record, finish, validate, and open the
+> finished video.
+
+### Update a script and rerecord
+
+> I updated `docs/ProductDemoScript.md`. Resynchronize the demo, summarize the
+> changes, repair any affected browser actions, then rerecord, validate, and
+> open the result.
+
+### Rerecord visual behavior without changing narration
+
+> Keep the existing script and narration, but update the browser recording to
+> reflect the current UI. Preserve the same flow where possible, then finish,
+> validate, and open the revised video.
+
+### Change the synthetic voice
+
+> Rerecord this demo with the current default Kokoro voice. Keep the script and
+> browser flow unchanged, preserve the prior finished video until the new one
+> verifies, and open the result.
+
+### Use supplied narration or make a silent demo
+
+> Use my supplied narration audio for this demo, align it with the existing
+> browser flow, then record, finish, validate, and open the result.
+
+Or:
+
+> Rerecord this demo without narration. Keep the browser choreography and
+> validation requirements unchanged.
+
+### Record with your own voice
+
+> Okay, now let’s rerecord the video with my own voice using the teleprompter.
+> Preserve the synthetic version while I record and review my takes.
+
+### Reopen an existing human-voice session
+
+> Reopen the existing human voiceover studio for this demo so I can make
+> changes. Preserve my existing session, takes, and selections.
+
+### Update visuals and reuse existing human voice
+
+> Update this demo for the new branding and reuse my existing human voice
+> recordings. The script has not changed. Rerecord and verify the visuals,
+> safely reuse the scene takes, open the studio for review, then finish,
+> verify, and open the revised human-voice video after I save.
+
+### Update a script after recording human voice
+
+> The demo script changed after I recorded my voice. Preserve the previous
+> voiceover session, update and verify the demo, then open a fresh voiceover
+> session for the changed narration.
+
+### Resume an interrupted finish or validation
+
+> Finish and verify the existing recording artifacts for this demo, then open
+> the result. Do not rerecord unless the saved artifacts cannot be completed
+> safely.
+
 ## Update
 
 ```bash
@@ -186,10 +268,16 @@ probe that scene before the final end-to-end rehearsal.
 
 ### Update an existing demo to ordered cues
 
-After updating the skill, preview `sync` for each existing demo. An older plan
+After updating the skill, ask:
+
+> Update this existing demo to the current ordered-cue format. Preview and
+> explain the migration first, preserve compatibility, then apply it only if
+> the review is safe.
+
+An older plan
 whose directions were already recognized as standalone actions reports
 `representation-only`, adds ordered `scene.cues`, and sets
-`driverReviewRequired` to `false`. Apply it with `sync --write`; the existing
+`driverReviewRequired` to `false`. The existing
 `scene.narration`, `scene.actions`, driver API, and narration clip names remain
 compatible.
 
@@ -204,7 +292,7 @@ no source edit is needed. If someone physically moved all directions into a
 separate section, the old plan does not contain enough information to infer
 their intended spoken context. Move each direction back beside the relevant
 words, preview the reported alignment changes, and let Cursor update the
-affected narration checkpoints before rerecording. `sync --write` backs up the
+affected narration checkpoints before rerecording. The skill backs up the
 previous plan and never rewrites the Markdown.
 
 See [Ordered-cue migration](references/ordered-cues-migration.md) for the
@@ -215,11 +303,10 @@ upgrade checklist and expected sync classifications.
 New demos default to Kokoro ONNX with `af_heart`. Existing manifests keep their
 explicitly configured narration mode, including `macos-say`, and are not
 silently migrated. Install and update prepare the separate locked runtime and
-verified default model. To repair or prepare them manually:
+verified default model. To repair or prepare them, ask:
 
-```bash
-node scripts/demo.mjs kokoro-setup
-```
+> Prepare or repair the local Kokoro runtime and verified default voice model
+> for Demo Video Builder.
 
 The generated agent-managed configuration is:
 
@@ -261,13 +348,16 @@ You can also be explicit:
 > `<path-to-demo.yaml>`. Play the approved video muted with its teleprompter,
 > preserve all takes, then finish and verify a separate human-voice version.
 
-The equivalent low-level commands are:
+For a branding or other visual-only rerecord, say:
 
-```bash
-node scripts/demo.mjs voiceover --manifest path/to/demo.yaml
-node scripts/demo.mjs voiceover-finish --manifest path/to/demo.yaml
-node scripts/demo.mjs voiceover-verify --manifest path/to/demo.yaml
-```
+> Update this demo for the new branding and reuse my existing human voice
+> recordings. The script has not changed.
+
+The skill rerecords and verifies the revised visuals, checks voiceover
+compatibility, opens the preserved takes against a new picture lock, and
+recalculates their timing fit. After review, it finishes and verifies the
+revised human-voice video. The old session remains intact. Users do not need to
+run Node commands or name the internal rebase operation.
 
 The video is always muted in the local, token-protected studio; no synthetic
 audio plays. It supports a
@@ -287,18 +377,21 @@ shows the exact overage and trims only audio beyond the locked scene boundary.
 It never speeds speech or overlaps the next scene. The recording toolbar stays
 pinned while long scene lists scroll, and selected-scene recording pins the
 correct prompt across its initial video seek. Saving visibly closes the
-recording session; final assembly still uses `voiceover-finish` followed by
-`voiceover-verify`. The saved screen provides a copyable handoff prompt.
-Finishing preserves the session, so revisions can reopen it without
-`--new-session` and regenerate with `voiceover-finish --force`. After successful
-finishing, the agent response includes a clickable video link and an exact
-prompt for reopening the preserved studio session.
+recording session and hands final assembly and verification back to the skill.
+The saved screen provides a copyable prompt for that handoff.
+If no full take is in use, saving lists any segments without an in-use scene
+take and asks before closing; confirming produces a reopen-studio handoff.
+Finishing preserves the session, so prompt-driven revisions can reopen and
+regenerate it without losing prior takes. After successful finishing, the
+agent response includes a clickable video link and an exact prompt for
+reopening the preserved studio session.
 
 Starting the studio creates an immutable picture-lock package, including the
 approved video, timeline, script, scene plan, contact sheet, and raw take when
 available. Human output uses `-human` filenames and never overwrites the
-synthetic version. If the approved video changes, start a preserved new session
-with `--new-session`.
+synthetic version. A changed script or spoken scene structure requires fresh
+voice recording; a visual-only change uses the guarded reuse workflow
+automatically.
 
 See [Narration modes](references/narration.md) and
 [Human voiceover](references/human-voiceover.md) for details.
@@ -340,9 +433,8 @@ These are implementation artifacts. They are normally hands off:
 - Raw timelines, browser captures, narration segments, and other intermediates:
   replaceable working data used to finish and diagnose a take.
 
-For low-level operation, run
-`node "$HOME/.cursor/skills/demo-video-builder/scripts/demo.mjs" help`.
-Script
+For diagnostics, ask the skill to inspect the generated artifacts, explain the
+current state, and run the relevant internal validation. Script
 resynchronization previews changes by default and writes only with explicit
 backup/atomic replacement. A not-yet-ready demo may rehearse, but production
 recording remains gated on a successful rehearsal and restoration proof.

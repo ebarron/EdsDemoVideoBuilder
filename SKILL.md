@@ -301,6 +301,8 @@ voiceover-studio trigger:
 - “Now let’s rerecord the video with my own voice using the teleprompter.”
 - “Open the teleprompter so I can narrate this demo.”
 - “Replace the synthetic narration with my voice.”
+- “Update this demo for the new branding and reuse my existing human voice
+  recordings. The script has not changed.”
 
 Do not require the user to name a command, manifest, or workflow when the
 current demo is unambiguous from recent context and finished artifacts. Locate
@@ -308,11 +310,42 @@ its manifest, confirm the finished synthetic video and timeline are available,
 then open the studio. Ask only which demo to use when multiple plausible
 picture-lock candidates exist.
 
-The equivalent internal command is:
+Commands in this section are agent-only implementation details. Never ask the
+user to run Node, name `--rebase`, or manually chain workflow commands.
+
+The internal studio command is:
 
 ```bash
 node scripts/demo.mjs voiceover --manifest path/to/demo.yaml
 ```
+
+Treat a natural-language request to update visuals while retaining the user's
+voice as one complete prompt-driven workflow:
+
+1. Locate the current demo and preserved voiceover session.
+2. Apply or observe the requested visual change, then record, finish, and
+   verify the revised synthetic video.
+3. Confirm the Markdown script and spoken scene structure are unchanged.
+4. Internally run the guarded rebase and open the studio with the preserved
+   takes and recalculated fit badges.
+5. After the user reviews and saves, finish with overwrite enabled, verify the
+   revised human-voice video, open it, and return its clickable link plus the
+   revision prompt.
+
+The agent internally invokes:
+
+```bash
+node scripts/demo.mjs voiceover --manifest path/to/demo.yaml --rebase
+```
+
+Rebase must require the Markdown script to be byte-for-byte unchanged and the
+narrated scene IDs, order, and spoken text to match. Create a new immutable
+session, copy rather than move all prior takes, preserve scene selections, and
+recompute fit against the revised windows. Place scene takes at the new scene
+starts. Never reuse a continuous accepted full take across shifted scene
+starts unless accepted scene takes cover every narrated segment; in that case
+clear the redundant master selection. Preserve the prior session on every
+success or failure.
 
 The studio must play the locked video muted, show the current and next spoken
 cues, request microphone permission in the local browser, and retain every full
@@ -343,9 +376,13 @@ boundary should receive a natural retake to avoid cutting words.
 Saving must present an unmistakable completed state, stop the studio server,
 and provide a copyable prompt asking the agent to finish, verify, open the
 result, and preserve the session for revisions; it must not imply that final
-assembly is complete. After the user saves and closes the studio, finish and
+assembly is complete. Before closing, treat an accepted full take as complete
+coverage; otherwise list every segment without an in-use scene take and ask
+whether to save anyway. If confirmed, show a reopen-studio handoff rather than
+a finish prompt. The server must require the same missing-coverage
+acknowledgment. After the user saves and closes the studio, finish and
 verify the separate human-voice output automatically unless they asked only to
-capture takes:
+capture takes. Internally run:
 
 ```bash
 node scripts/demo.mjs voiceover-finish --manifest path/to/demo.yaml
@@ -357,15 +394,16 @@ After finishing and verification succeed, the response must include:
 1. a clickable link to the finished human-voiceover video; and
 2. this exact reusable instruction:
    “Reopen the existing human voiceover studio for this demo so I can make
-   changes. Preserve the existing session, takes, and selections; do not use
-   `--new-session`.”
+   changes. Preserve my existing session, takes, and selections.”
 
 The session preserves an immutable picture-lock package and the synthetic
-outputs. Human artifacts use separate `-human` names. If the picture changed,
-use `voiceover --new-session`; never attach prior takes to a different video.
-Finishing preserves the existing session. For revisions, reopen it without
-`--new-session`, then regenerate with `voiceover-finish --force` and rerun
-`voiceover-verify`.
+outputs. Human artifacts use separate `-human` names. If only the picture
+changed, use the guarded `voiceover --rebase` flow above. If the script or
+spoken scene structure changed, use `voiceover --new-session` and rerecord the
+affected narration; never bypass rebase compatibility checks.
+Finishing preserves the existing session. For prompt-driven revisions,
+internally reopen it without creating a new session, regenerate with overwrite
+enabled, and rerun verification.
 Read [references/human-voiceover.md](references/human-voiceover.md).
 
 Existing `clips` and `reference` workflows remain available for externally
