@@ -3,7 +3,8 @@
 `demo-video-builder` is a macOS-first Cursor skill for making a narrated
 recording of a real browser app.
 
-You normally edit one file: your Markdown demo script.
+You can paste the demo script directly into your Cursor prompt. The skill
+stores it as managed Markdown that you can edit for later revisions.
 
 ## Install
 
@@ -24,12 +25,20 @@ Start a new Cursor chat or reload Cursor after installation so
 
 ## Quick start: first demo
 
-### 1. Write or edit the Markdown script
+### 1. Ask Cursor with the script inline
 
-Normal paragraphs are spoken. Keep browser directions beside the words they
-belong to as plain English inside square brackets, either standalone or inline:
+You do not need to create a script file, start the app, or manage a development
+server first. Open the app project in Cursor and paste one prompt like this:
 
-```markdown
+```text
+Use the demo-video-builder skill to create and record a demo for the current app.
+Treat the content under "Demo script" as the authoritative script and save it as
+a managed Markdown file. Inspect this repository to discover and manage the app
+startup lifecycle. Ask me only about anything important you cannot determine.
+Internally verify and repair the browser flow, then record, finish, validate, and
+open the result. Save the finished video to docs/video/ProductDemo.mp4.
+
+Demo script:
 # Analytics overview
 
 This dashboard shows request volume and service health at a glance. [Open Analytics from the main navigation.]
@@ -39,54 +48,24 @@ The traffic chart makes the morning peak easy to see.
 [Point to Requests per minute, then scroll to Service health.]
 ```
 
-See [Script convention](references/script-convention.md) for optional advanced
-markup.
+Normal paragraphs are spoken. Browser directions stay beside the words they
+belong to as plain English inside square brackets. The skill stores the inline
+script, discovers the app's start command and readiness behavior, starts or
+reuses the app as needed, initializes the managed demo files automatically,
+and manages the app lifecycle while iterating.
 
-### 2. Start the app
+If startup cannot be inferred safely, credentials are needed, or several apps
+are plausible, the skill asks a focused question. Otherwise, no manual server
+step is expected. If you already have a Markdown script, you can reference its
+path instead of pasting it. See [Script convention](references/script-convention.md)
+for optional advanced markup.
 
-Open the app or start its development server. The examples below use
-`http://127.0.0.1:5173`.
-
-### 3. Ask Cursor to record the demo
-
-**Option A — Natural-language request**
-
-> Use the `demo-video-builder` skill to record a demo from
-> `docs/ProductDemoScript.md` against the app running at
-> `http://127.0.0.1:5173`. Save the finished video to
-> `docs/video/ProductDemo.mp4`. Inspect the app and internally verify and
-> repair the action path before recording. Ask me only about anything important
-> you cannot determine. Record, finish, validate, and open the result.
-
-**OR**
-
-**Option B — Explicit slash command**
-
-```text
-/demo-video-builder Record a demo from docs/ProductDemoScript.md against http://127.0.0.1:5173. Save the finished video to docs/video/ProductDemo.mp4. Inspect the app and internally verify and repair the action path before recording. Ask only about anything important you cannot determine. Record, finish, validate, and open the result.
-```
-
-For another app, copy either option and change the script path, app URL, and
-output path. `@` adds a file or other context to a prompt; it does not invoke a
-skill. If `/demo-video-builder` does not appear after installation, start a
-new chat or reload Cursor so skills are rediscovered.
-
-### 4. Review the video and request changes
-
-**Option A — Natural-language request**
+### 2. Review the video and request changes
 
 > The video is close. In the storage section, keep narration running while
 > navigating the detail dialogs. Replace the overview and final-dashboard
 > scroll jumps with smooth continuous scrolling, then rerecord and open
 > `docs/video/ProductDemo.mp4`.
-
-**OR**
-
-**Option B — Explicit slash command**
-
-```text
-/demo-video-builder The video is close. In the storage section, keep narration running while navigating the detail dialogs. Replace the overview and final-dashboard scroll jumps with smooth continuous scrolling, then rerecord and open docs/video/ProductDemo.mp4.
-```
 
 The skill discards failed takes and enforces its write, secret, baseline, and
 restoration safety rules without requiring you to repeat them in every prompt.
@@ -97,12 +76,6 @@ All demo-building interactions are prompt driven. The skill runs its internal
 tools and commands; you do not need to invoke Node scripts or know workflow
 flags. Include a script, manifest, or output path only when the current demo is
 not obvious from the conversation.
-
-### Initialize without recording
-
-> Initialize a new browser demo from `docs/ProductDemoScript.md` against
-> `http://127.0.0.1:5173`. Create the managed demo files, but do not rehearse or
-> record yet.
 
 ### Rehearse and repair without recording
 

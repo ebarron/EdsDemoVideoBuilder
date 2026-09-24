@@ -11,7 +11,7 @@ const README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
 
 test('README first-demo script interleaves narration and directions', () => {
   const example = README.match(
-    /### 1\. Write or edit the Markdown script[\s\S]*?```markdown\n([\s\S]*?)\n```/,
+    /### 1\. Ask Cursor with the script inline[\s\S]*?```text\n[\s\S]*?Demo script:\n([\s\S]*?)\n```/,
   )?.[1];
   assert.ok(example, 'README Markdown example was not found');
   const plan = parseDemoScript(example, { source: 'README.md' });
@@ -45,14 +45,15 @@ test('README links resolve and prompt states safety gates', () => {
     /docs\/ProductDemoScript\.md/,
     /http:\/\/127\.0\.0\.1:5173/,
     /docs\/video\/ProductDemo\.mp4/,
-    /Option A — Natural-language request/,
-    /\*\*OR\*\*/,
-    /Option B — Explicit slash command/,
-    /\/demo-video-builder Record a demo from docs\/ProductDemoScript\.md/,
-    /`@` adds a file or other context to a prompt; it does not invoke a/,
+    /You do not need to create a script file, start the app, or manage a development\s+server first/,
+    /Treat the content under "Demo script" as the authoritative script/,
+    /discover and manage the app\s+startup lifecycle/,
+    /starts or\s+reuses the app as needed/,
+    /initializes the managed demo files automatically/,
+    /no manual server\s+step is expected/,
+    /already have a Markdown script, you can reference its\s+path instead/,
     /Start a new Cursor chat or reload Cursor/,
     /The video is close\. In the storage section/,
-    /\/demo-video-builder The video is close\./,
     /never\*\* guess or persist credential values/i,
     /asks for explicit authorization and restoration requirements/,
     /app\.allowInsecureTls: true/,
@@ -88,7 +89,6 @@ test('README links resolve and prompt states safety gates', () => {
     /recording\s+toolbar[\s\S]{0,12}stays\s+pinned/,
     /selected-scene\s+recording pins\s+the\s+correct prompt/,
     /All demo-building interactions are prompt driven/,
-    /Initialize without recording/,
     /Rehearse and repair without recording/,
     /Record a finished synthetic-voice demo/,
     /Update a script and rerecord/,
