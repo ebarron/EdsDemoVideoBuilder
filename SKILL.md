@@ -87,7 +87,10 @@ user must issue in sequence. A user may ask for the finished video directly.
 The agent internally initializes, preflights, probes/repairs, and rehearses as
 needed before recording, then finishes and verifies. Ask the user only for
 material ambiguity or required write authorization—not a routine extra
-rehearsal approval.
+rehearsal approval. Do not require the user's prompt to enumerate repository
+inspection, app startup, browser-flow repair, rehearsal, finishing, or
+validation; those are built-in responsibilities of every finished-video
+request.
 
 ## Resynchronize an edited script
 

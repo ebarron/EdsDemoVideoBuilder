@@ -11,7 +11,7 @@ const README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
 
 test('README first-demo script interleaves narration and directions', () => {
   const example = README.match(
-    /### 1\. Ask Cursor with the script inline[\s\S]*?```text\n[\s\S]*?Demo script:\n([\s\S]*?)\n```/,
+    /### 1\. Ask Cursor with the script inline[\s\S]*?```text\n[\s\S]*?docs\/DemoScript\.md:\n([\s\S]*?)\n```/,
   )?.[1];
   assert.ok(example, 'README Markdown example was not found');
   const plan = parseDemoScript(example, { source: 'README.md' });
@@ -45,11 +45,14 @@ test('README links resolve and prompt states safety gates', () => {
     /docs\/ProductDemoScript\.md/,
     /http:\/\/127\.0\.0\.1:5173/,
     /docs\/video\/ProductDemo\.mp4/,
-    /You do not need to create a script file, start the app, or manage a development\s+server first/,
-    /Treat the content under "Demo script" as the authoritative script/,
-    /discover and manage the app\s+startup lifecycle/,
+    /Open the app project in Cursor and paste one prompt containing your demo\s+script/,
+    /prepares the demo, manages the app, records the browser flow,\s+and opens the finished video/,
+    /Save the content below as docs\/DemoScript\.md and treat it as the\s+authoritative script/,
+    /required\s+access credentials or authorization for state-changing actions/,
     /starts or\s+reuses the app as needed/,
     /initializes the managed demo files automatically/,
+    /Repository inspection, browser-flow repair, rehearsal, finishing, and\s+validation are built into the skill/,
+    /rather than restating those internal steps/,
     /no manual server\s+step is expected/,
     /already have a Markdown script, you can reference its\s+path instead/,
     /Start a new Cursor chat or reload Cursor/,

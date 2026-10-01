@@ -78,6 +78,7 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Existing\s+narration modes must not import, install, probe, or download Kokoro assets/,
     /rerecord the video with my own voice using the teleprompter/i,
     /Do not require the user to name a command, manifest, or workflow/,
+    /Do not require the user's prompt to enumerate repository\s+inspection, app startup, browser-flow repair, rehearsal, finishing, or\s+validation/,
     /finish and\s+verify the separate\s+human-voice output automatically/,
     /studio must play the locked video muted/,
     /recording controls, microphone, meter, and status pinned/,

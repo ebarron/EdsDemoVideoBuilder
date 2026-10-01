@@ -27,18 +27,19 @@ Start a new Cursor chat or reload Cursor after installation so
 
 ### 1. Ask Cursor with the script inline
 
-You do not need to create a script file, start the app, or manage a development
-server first. Open the app project in Cursor and paste one prompt like this:
+Open the app project in Cursor and paste one prompt containing your demo
+script. The skill prepares the demo, manages the app, records the browser flow,
+and opens the finished video:
 
 ```text
-Use the demo-video-builder skill to create and record a demo for the current app.
-Treat the content under "Demo script" as the authoritative script and save it as
-a managed Markdown file. Inspect this repository to discover and manage the app
-startup lifecycle. Ask me only about anything important you cannot determine.
-Internally verify and repair the browser flow, then record, finish, validate, and
-open the result. Save the finished video to docs/video/ProductDemo.mp4.
+Use the demo-video-builder skill to create a finished browser demo for the
+current app. Save the content below as docs/DemoScript.md and treat it as the
+authoritative script. Save the finished video to docs/video/ProductDemo.mp4.
+Ask me only for information you cannot safely determine, such as required
+access credentials or authorization for state-changing actions. Open the
+finished video when it is ready.
 
-Demo script:
+docs/DemoScript.md:
 # Analytics overview
 
 This dashboard shows request volume and service health at a glance. [Open Analytics from the main navigation.]
@@ -53,6 +54,10 @@ belong to as plain English inside square brackets. The skill stores the inline
 script, discovers the app's start command and readiness behavior, starts or
 reuses the app as needed, initializes the managed demo files automatically,
 and manages the app lifecycle while iterating.
+
+Repository inspection, browser-flow repair, rehearsal, finishing, and
+validation are built into the skill. Prompts specify the desired demo and
+outcome rather than restating those internal steps.
 
 If startup cannot be inferred safely, credentials are needed, or several apps
 are plausible, the skill asks a focused question. Otherwise, no manual server
