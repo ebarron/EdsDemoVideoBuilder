@@ -2,6 +2,7 @@
   "name": "demo-video-builder",
   "version": "1.0.0",
   "description": "Demo Video Builder Cursor skill for recording and validating narrated Playwright browser demos.",
+  "license": "Apache-2.0",
   "private": true,
   "type": "module",
   "repository": {

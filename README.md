@@ -425,3 +425,10 @@ Detailed references:
 - [Manifest reference](references/manifest.md)
 - [Driver API](references/driver-api.md)
 - [FFmpeg and validation](references/ffmpeg-and-validation.md)
+
+## License and dependencies
+
+Demo Video Builder is licensed under the [Apache License 2.0](LICENSE).
+Third-party packages and runtime assets are fetched separately during
+installation and retain their upstream licenses; see
+[Third-party dependencies](THIRD_PARTY_DEPENDENCIES.md).
