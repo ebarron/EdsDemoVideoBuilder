@@ -91,6 +91,8 @@ test('README links resolve and prompt states safety gates', () => {
     /Recording itself does not\s+replace\s+accepted selections/,
     /recording\s+toolbar[\s\S]{0,12}stays\s+pinned/,
     /selected-scene\s+recording pins\s+the\s+correct prompt/,
+    /Managed app processes receive only portable startup\s+environment values/,
+    /one-use launch value is removed from the URL before use and is never printed/,
     /All demo-building interactions are prompt driven/,
     /Rehearse and repair without recording/,
     /Record a finished synthetic-voice demo/,

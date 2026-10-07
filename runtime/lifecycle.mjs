@@ -6,6 +6,26 @@ import path from 'node:path';
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
+const STARTUP_ENVIRONMENT = new Set([
+  'APPDATA',
+  'COMSPEC',
+  'HOME',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'LOCALAPPDATA',
+  'LOGNAME',
+  'PATH',
+  'PATHEXT',
+  'SHELL',
+  'SYSTEMROOT',
+  'TEMP',
+  'TMP',
+  'TMPDIR',
+  'USER',
+  'USERPROFILE',
+  'WINDIR',
+]);
 
 function requestOnce(url, { allowInsecureTls, signal }) {
   return new Promise((resolve, reject) => {
@@ -75,14 +95,19 @@ export async function waitForUrl(url, timeoutMs, options = {}) {
   throw new Error(`App did not become ready at ${url}: ${latest?.error ?? latest?.status ?? 'timeout'}`);
 }
 
-function lifecycleEnvironment(lifecycle, environment) {
-  const additions = {};
+export function lifecycleEnvironment(lifecycle, environment) {
+  const childEnvironment = {};
+  for (const [name, value] of Object.entries(environment)) {
+    if (STARTUP_ENVIRONMENT.has(name.toUpperCase()) && value !== undefined) {
+      childEnvironment[name] = value;
+    }
+  }
   for (const [targetName, sourceName] of Object.entries(lifecycle.env ?? {})) {
     const value = environment[sourceName];
     if (!value) throw new Error(`Missing lifecycle environment variable ${sourceName}`);
-    additions[targetName] = value;
+    childEnvironment[targetName] = value;
   }
-  return { ...environment, ...additions };
+  return childEnvironment;
 }
 
 export async function startLifecycle(manifest, workDir, environment = process.env) {

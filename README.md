@@ -8,8 +8,7 @@ stores it as managed Markdown that you can edit for later revisions.
 
 ## Install
 
-Prerequisites: macOS, [GitHub CLI](https://cli.github.com/) authenticated with
-access to the private repository (`gh auth login` if needed), and Node.js 20+
+Prerequisites: macOS, [GitHub CLI](https://cli.github.com/), and Node.js 20+
 with npm.
 
 ```bash
@@ -61,9 +60,13 @@ outcome rather than restating those internal steps.
 
 If startup cannot be inferred safely, credentials are needed, or several apps
 are plausible, the skill asks a focused question. Otherwise, no manual server
-step is expected. If you already have a Markdown script, you can reference its
-path instead of pasting it. See [Script convention](references/script-convention.md)
-for optional advanced markup.
+step is expected. Managed app processes receive only portable startup
+environment values plus name-only variables declared in the manifest; they do
+not inherit the agent's complete environment.
+If you already have a Markdown script, you can reference its
+path instead of pasting it. See
+[Script convention](references/script-convention.md) for optional advanced
+markup.
 
 ### 2. Review the video and request changes
 
@@ -337,8 +340,9 @@ recalculates their timing fit. After review, it finishes and verifies the
 revised human-voice video. The old session remains intact. Users do not need to
 run Node commands or name the internal rebase operation.
 
-The video is always muted in the local, token-protected studio; no synthetic
-audio plays. It supports a
+The video is always muted in the loopback-only, session-protected studio; its
+one-use launch value is removed from the URL before use and is never printed.
+No synthetic audio plays. It supports a
 continuous full take and scene-level punch-in retakes, normalizes microphone
 recordings to 48 kHz mono WAV, retains take history, and provides Play/Stop
 controls directly on recorded scene rows for auditioning the latest take.

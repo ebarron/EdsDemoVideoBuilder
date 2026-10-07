@@ -13,7 +13,9 @@ relative to the manifest file.
   hand-edited.
 - `app.url`, `app.cwd`, and `app.lifecycle` define the app. Lifecycle
   `external` requires an already-running app. `command` uses an argv array,
-  waits for `readyUrl`, and stops its child after rehearsal/recording.
+  waits for `readyUrl`, and stops its child after rehearsal/recording. Command
+  children receive a minimal startup environment rather than the agent's
+  complete ambient environment.
 - `app.allowInsecureTls` defaults to `false`. Set it to `true` only for a known
   self-signed demo endpoint.
 - `browser` defines Chrome channel, viewport, zoom, and color scheme.
@@ -31,6 +33,26 @@ relative to the manifest file.
   and timeline are never overwritten unless `finish --force` is explicit.
 - `tools.ffmpegEnv`, when present, names an environment variable containing
   the FFmpeg executable path.
+
+## Generated-artifact locations
+
+The scaffold keeps replaceable recording data in `/tmp/<id>-demo` and final
+artifacts in its `output/` directory. Raw browser video, generated narration,
+click evidence, lifecycle logs, rejected-take diagnostics, filter scripts, and
+timeline pointers stay under `output.workDir`. Human-voice sessions, takes,
+private launchers, and studio locks stay in the adjacent `<id>-voiceover/`
+directory. The installed Kokoro runtime uses `.kokoro-runtime/`; its model and
+audio cache default to the user's system cache outside the checkout.
+
+These standard locations and exact generated filenames are ignored by this
+repository. Media extensions are not ignored globally because narration clips,
+reference audio, and documentation media may be intentional source assets. If
+`output.workDir`, `narration.kokoro.cacheDir`, or final output paths are
+overridden to another location inside a repository, ignore that exact
+directory or generated file in the consuming repository unless the artifact
+is intentionally published. Storage-state files remain external inputs; the
+runtime keeps newly prepared browser state in memory and never copies it into
+project output.
 
 ## Default Kokoro narration
 
@@ -114,4 +136,28 @@ lifecycle:
 ```
 
 Here `API_TOKEN` is the child-process variable and the value is the source
-environment-variable name.
+environment-variable name. Values stay outside the manifest.
+
+Command lifecycles inherit only portable process-startup settings: executable
+search paths, home/user/shell values, temporary-directory and locale values,
+plus the corresponding Windows startup variables. App, cloud, credential,
+debugging, and package-manager configuration is excluded unless named in
+`lifecycle.env`. This includes ambient values such as `NODE_OPTIONS`.
+
+For an existing app that previously relied on implicit inheritance, map each
+required source variable explicitly. A same-name mapping is the migration
+escape hatch:
+
+```yaml
+lifecycle:
+  mode: command
+  start: ["npm", "run", "dev"]
+  env:
+    DATABASE_URL: DATABASE_URL
+    NODE_ENV: PRODUCT_DEMO_NODE_ENV
+```
+
+There is intentionally no wildcard or “inherit everything” setting. The skill
+inspects the app's startup configuration and maintains these name-only
+mappings. It asks only when a required variable or credential cannot be
+inferred, and never writes the value into managed files.

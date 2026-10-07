@@ -134,6 +134,39 @@ function waveBuffer(seconds = 1) {
   return buffer;
 }
 
+async function authenticateStudio(studio) {
+  const launcherSource = fs.readFileSync(studio.launcher, 'utf8');
+  const serializedUrl = launcherSource.match(
+    /window\.location\.replace\(("(?:[^"\\]|\\.)*")\)/,
+  )?.[1];
+  assert.ok(serializedUrl, 'private launcher did not contain its bootstrap URL');
+  const bootstrapUrl = new URL(JSON.parse(serializedUrl));
+  const bootstrap = new URLSearchParams(bootstrapUrl.hash.slice(1)).get('bootstrap');
+  assert.ok(bootstrap);
+  assert.equal(bootstrapUrl.origin, new URL(studio.url).origin);
+  assert.equal(bootstrapUrl.search, '');
+
+  const response = await fetch(new URL('/auth/session', studio.url), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      origin: new URL(studio.url).origin,
+    },
+    body: JSON.stringify({ bootstrap }),
+  });
+  assert.equal(response.status, 204);
+  const setCookie = response.headers.get('set-cookie');
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /SameSite=Strict/i);
+  assert.equal(fs.existsSync(studio.launcher), false);
+  return {
+    bootstrap,
+    bootstrapUrl,
+    cookie: setCookie.split(';', 1)[0],
+    sessionToken: setCookie.match(/=([^;]+)/)?.[1],
+  };
+}
+
 test('builds teleprompter windows from finished-timeline positions and ordered cues', () => {
   const files = fixture();
   const plan = JSON.parse(fs.readFileSync(files.manifest.scenePlan, 'utf8'));
@@ -469,10 +502,72 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
   assert.equal(fs.existsSync(files.manifest.output.video), true);
 });
 
-test('serves the muted studio and take audio only through its local token', async () => {
+test('bootstraps a private Studio session without auth in URLs or responses', async () => {
   const files = fixture();
-  const studio = await createVoiceoverStudio(files.manifest, { open: false });
-  const page = await fetch(studio.url);
+  const logs = [];
+  const studio = await createVoiceoverStudio(files.manifest, {
+    open: false,
+    logger: { error: (message) => logs.push(message) },
+  });
+  const publicUrl = new URL(studio.url);
+  assert.equal(publicUrl.search, '');
+  assert.equal(publicUrl.hash, '');
+  assert.equal(fs.statSync(studio.launcher).mode & 0o077, 0);
+
+  const bootstrapPage = await fetch(studio.url);
+  assert.equal(bootstrapPage.status, 200);
+  const bootstrapHtml = await bootstrapPage.text();
+  assert.match(bootstrapHtml, /window\.history\.replaceState/);
+  assert.ok(
+    bootstrapHtml.indexOf('window.history.replaceState') <
+      bootstrapHtml.indexOf("fetch('/auth/session'"),
+  );
+  assert.doesNotMatch(bootstrapHtml, /bootstrap=[a-f0-9]{64}/);
+  assert.doesNotMatch(bootstrapHtml, /Record full take/);
+
+  const unauthorized = await fetch(new URL('/api/session', studio.url));
+  assert.equal(unauthorized.status, 403);
+  assert.equal(await unauthorized.text(), 'Voiceover studio authorization required');
+
+  const auth = await authenticateStudio(studio);
+  const ordinaryOutput = JSON.stringify({
+    voiceoverStudio: studio.url,
+    session: studio.directory,
+  });
+  assert.doesNotMatch(ordinaryOutput, new RegExp(auth.bootstrap));
+  assert.doesNotMatch(ordinaryOutput, new RegExp(auth.sessionToken));
+  assert.doesNotMatch(studio.launcher, new RegExp(auth.bootstrap));
+  assert.doesNotMatch(studio.launcher, new RegExp(auth.sessionToken));
+  const reused = await fetch(new URL('/auth/session', studio.url), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      origin: publicUrl.origin,
+    },
+    body: JSON.stringify({ bootstrap: auth.bootstrap }),
+  });
+  assert.equal(reused.status, 403);
+
+  const request = (pathname, options = {}) => fetch(new URL(pathname, studio.url), {
+    ...options,
+    headers: {
+      cookie: auth.cookie,
+      ...(!['GET', 'HEAD'].includes(options.method ?? 'GET')
+        ? { origin: publicUrl.origin }
+        : {}),
+      ...options.headers,
+    },
+  });
+  const crossOriginMutation = await request('/api/accept-latest', {
+    method: 'POST',
+    headers: { origin: 'http://127.0.0.1:1' },
+  });
+  assert.equal(crossOriginMutation.status, 403);
+  assert.equal(
+    await crossOriginMutation.text(),
+    'Voiceover studio authorization required',
+  );
+  const page = await request('/');
   assert.equal(page.status, 200);
   const html = await page.text();
   assert.match(html, /The video is always muted/);
@@ -489,10 +584,11 @@ test('serves the muted studio and take audio only through its local token', asyn
   assert.match(html, /Reopen the existing human voiceover studio for this demo/);
   assert.doesNotMatch(html, /--new-session/);
   assert.doesNotMatch(html, /<h2>Take history<\/h2>/);
-  const unauthorized = await fetch(new URL('/api/session', studio.url));
-  assert.equal(unauthorized.status, 403);
-  const token = new URL(studio.url).searchParams.get('token');
-  const session = await fetch(`${new URL(studio.url).origin}/api/session?token=${token}`);
+  assert.doesNotMatch(html, new RegExp(auth.bootstrap));
+  assert.doesNotMatch(html, new RegExp(auth.sessionToken));
+  assert.match(html, /window\.history\.replaceState/);
+
+  const session = await request('/api/session');
   assert.equal(session.status, 200);
   const firstState = await session.json();
   const take = registerVoiceoverTake({
@@ -504,18 +600,31 @@ test('serves the muted studio and take audio only through its local token', asyn
     sessionDir: studio.directory,
   });
   const audioUrl = new URL('/api/take-audio', studio.url);
-  audioUrl.searchParams.set('token', token);
   audioUrl.searchParams.set('takeId', take.take.id);
-  const audio = await fetch(audioUrl, { headers: { range: 'bytes=0-31' } });
+  const audio = await request(audioUrl, { headers: { range: 'bytes=0-31' } });
   assert.equal(audio.status, 206);
   assert.equal(audio.headers.get('content-type'), 'audio/wav');
+  assert.equal(audio.headers.get('cross-origin-resource-policy'), 'same-origin');
   assert.equal((await audio.arrayBuffer()).byteLength, 32);
-  const unauthorizedAudio = new URL(audioUrl);
-  unauthorizedAudio.searchParams.delete('token');
-  assert.equal((await fetch(unauthorizedAudio)).status, 403);
-  const latestUrl = new URL('/api/accept-latest', studio.url);
-  latestUrl.searchParams.set('token', token);
-  const latest = await fetch(latestUrl, { method: 'POST' });
+  assert.equal((await fetch(audioUrl)).status, 403);
+
+  const diagnosticId = `${auth.bootstrap}-${auth.sessionToken}-${files.root}`;
+  const sanitized = await request('/api/accept', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ takeId: diagnosticId }),
+  });
+  assert.equal(sanitized.status, 400);
+  const sanitizedBody = await sanitized.text();
+  assert.equal(sanitizedBody, 'Voiceover request could not be completed');
+  assert.doesNotMatch(sanitizedBody, /Error|at\s|demo-voiceover-test|[a-f0-9]{64}/);
+  assert.match(logs.at(-1), /Unknown voiceover take/);
+  assert.match(logs.at(-1), /\[REDACTED\]/);
+  assert.match(logs.at(-1), new RegExp(files.root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(logs.join('\n'), new RegExp(auth.bootstrap));
+  assert.doesNotMatch(logs.join('\n'), new RegExp(auth.sessionToken));
+
+  const latest = await request('/api/accept-latest', { method: 'POST' });
   assert.equal(latest.status, 200);
   assert.equal((await latest.json()).accepted[0].takeId, take.take.id);
   const replacement = registerVoiceoverTake({
@@ -526,9 +635,7 @@ test('serves the muted studio and take audio only through its local token', asyn
     bytes: waveBuffer(2),
     sessionDir: studio.directory,
   });
-  const acceptUrl = new URL('/api/accept', studio.url);
-  acceptUrl.searchParams.set('token', token);
-  const accepted = await fetch(acceptUrl, {
+  const accepted = await request('/api/accept', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -554,9 +661,7 @@ test('serves the muted studio and take audio only through its local token', asyn
     bytes: waveBuffer(0.5),
     sessionDir: studio.directory,
   });
-  const deleteUrl = new URL('/api/delete-take', studio.url);
-  deleteUrl.searchParams.set('token', token);
-  const deleted = await fetch(deleteUrl, {
+  const deleted = await request('/api/delete-take', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ takeId: accidentalMaster.take.id }),
@@ -571,31 +676,43 @@ test('serves the muted studio and take audio only through its local token', asyn
     open: false,
     newSession: true,
   });
-  const oldSession = await fetch(
-    `${new URL(studio.url).origin}/api/session?token=${token}`,
-  ).then((response) => response.json());
-  assert.equal(oldSession.id, firstState.id);
-  const newerUrl = new URL(newer.url);
-  const newerState = await fetch(
-    `${newerUrl.origin}/api/session?token=${newerUrl.searchParams.get('token')}`,
-  ).then((response) => response.json());
-  assert.notEqual(oldSession.id, newerState.id);
-  const blockedCompletion = await fetch(
-    `${new URL(studio.url).origin}/api/complete?token=${token}`,
-    { method: 'POST' },
-  );
-  assert.equal(blockedCompletion.status, 400);
-  assert.match(await blockedCompletion.text(), /do not have an in-use voice track/);
-  const completed = await fetch(
-    `${new URL(studio.url).origin}/api/complete?token=${token}`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ allowMissing: true }),
+  const newerAuth = await authenticateStudio(newer);
+  const newerRequest = (pathname, options = {}) => fetch(new URL(pathname, newer.url), {
+    ...options,
+    headers: {
+      cookie: newerAuth.cookie,
+      ...(!['GET', 'HEAD'].includes(options.method ?? 'GET')
+        ? { origin: new URL(newer.url).origin }
+        : {}),
+      ...options.headers,
     },
-  );
+  });
+  const oldSession = await request('/api/session').then((response) => response.json());
+  assert.equal(oldSession.id, firstState.id);
+  const newerState = await newerRequest('/api/session').then((response) => response.json());
+  assert.notEqual(oldSession.id, newerState.id);
+  const blockedCompletion = await request('/api/complete', { method: 'POST' });
+  assert.equal(blockedCompletion.status, 400);
+  assert.equal(await blockedCompletion.text(), 'Voiceover session cannot be completed');
+  const completed = await request('/api/complete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ allowMissing: true }),
+  });
   assert.equal(completed.status, 200);
+  assert.match(completed.headers.get('set-cookie'), /Max-Age=0/);
   assert.equal((await completed.json()).completionWarnings.length, 1);
   assert.equal((await studio.done).completedAt !== null, true);
   await newer.close();
+
+  const expiring = await createVoiceoverStudio(files.manifest, {
+    open: false,
+    newSession: true,
+    bootstrapTtlMs: 10,
+  });
+  const expired = await expiring.done;
+  assert.equal(expired.reason, 'bootstrap-expired');
+  assert.equal(fs.existsSync(expiring.launcher), false);
+  const reopened = await createVoiceoverStudio(files.manifest, { open: false });
+  await reopened.close();
 });

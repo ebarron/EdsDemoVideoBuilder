@@ -116,7 +116,7 @@ try {
     if (url.pathname === '/') {
       await route.fulfill({
         contentType: 'text/html',
-        body: voiceoverStudioHtml('smoke-token'),
+        body: voiceoverStudioHtml(),
       });
     } else if (url.pathname === '/api/session') {
       await route.fulfill({

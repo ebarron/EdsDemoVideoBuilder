@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cursor.local/demo-video-builder/demo-manifest.schema.json",
+  "$id": "https://example.com/schemas/demo-video-builder/demo-manifest.schema.json",
   "title": "Demo Video Builder manifest",
   "type": "object",
   "additionalProperties": false,
@@ -89,7 +89,7 @@
               "default": "SIGTERM"
             },
             "env": {
-              "$ref": "#/$defs/envRefs"
+              "$ref": "#/$defs/lifecycleEnvRefs"
             }
           },
           "allOf": [
@@ -429,6 +429,15 @@
       "type": "object",
       "propertyNames": {
         "pattern": "^[a-z][a-zA-Z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/envName"
+      }
+    },
+    "lifecycleEnvRefs": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
       },
       "additionalProperties": {
         "$ref": "#/$defs/envName"

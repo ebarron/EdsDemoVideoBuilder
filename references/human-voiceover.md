@@ -20,8 +20,18 @@ Ask in plain language:
 
 The skill copies the approved video and its supporting artifacts into a
 timestamped, immutable session, then opens a local teleprompter in the default
-browser. The page is bound to `127.0.0.1` and protected by a random session
-token. Microphone audio and takes stay on the local machine.
+browser. The page is bound to `127.0.0.1` and protected by a random local
+session. A mode-0600 temporary launcher carries a one-use, short-lived
+bootstrap value in a URL fragment. The page removes the fragment immediately,
+exchanges it for an HttpOnly same-site session cookie, and deletes the
+launcher. Authorization values never appear in HTTP request URLs, the normal
+browser history, or command output. Studio APIs, video, and take audio reject
+requests without the session.
+
+Printed loopback URLs are informational and no longer authenticate a copied or
+bookmarked tab. If the private launch expires, ask the agent to reopen the
+studio; do not copy tokens or run a manual Node command. Microphone audio and
+takes stay on the local machine.
 
 The locked package contains:
 

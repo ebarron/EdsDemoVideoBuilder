@@ -1,10 +1,9 @@
 # Sharing and installation
 
-The supported installation is a macOS user-level clone of the private
+The supported installation is a macOS user-level clone of the public source
 repository. It makes the skill available across Cursor projects.
 
-Prerequisites: GitHub CLI authenticated with repository access and Node.js 20+
-with npm.
+Prerequisites: GitHub CLI and Node.js 20+ with npm.
 
 ```bash
 gh repo clone ebarron/EdsDemoVideoBuilder "$HOME/.cursor/skills/demo-video-builder"

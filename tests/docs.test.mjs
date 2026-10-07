@@ -12,6 +12,13 @@ const MARKDOWN = [
     .filter((name) => name.endsWith('.md'))
     .map((name) => path.join(ROOT, 'references', name)),
 ];
+const PUBLIC_DOCUMENTATION = [
+  ...MARKDOWN,
+  path.join(ROOT, 'schemas', 'demo-manifest.schema.json'),
+  path.join(ROOT, 'templates', 'demo.yaml'),
+  path.join(ROOT, 'templates', 'notes.md'),
+  path.join(ROOT, 'templates', 'script.md'),
+];
 const SKILL = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8');
 const DRIVER_API = fs.readFileSync(path.join(ROOT, 'references', 'driver-api.md'), 'utf8');
 const FFMPEG = fs.readFileSync(
@@ -46,6 +53,26 @@ test('local Markdown links resolve', () => {
         `${path.relative(ROOT, file)} has a missing link: ${link}`,
       );
     }
+  }
+});
+
+test('public documentation uses safe infrastructure examples', () => {
+  const privateIpv4 =
+    /\b(?:10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2})\b/;
+  const internalHostname = /\bhttps?:\/\/(?:[a-z0-9-]+\.)+(?:corp|internal|local)(?=[:/])/i;
+  const embeddedCredentials = /\bhttps?:\/\/[^/\s:@]+:[^@\s/]+@/i;
+
+  for (const file of PUBLIC_DOCUMENTATION) {
+    const source = fs.readFileSync(file, 'utf8');
+    const relative = path.relative(ROOT, file);
+    assert.doesNotMatch(source, privateIpv4, `${relative} contains a private IPv4 address`);
+    assert.doesNotMatch(source, internalHostname, `${relative} contains an internal hostname`);
+    assert.doesNotMatch(source, embeddedCredentials, `${relative} embeds URL credentials`);
+    assert.doesNotMatch(
+      source,
+      /\bprivate (?:source )?repository\b|\bprivate repo\b/i,
+      `${relative} describes the source repository as private`,
+    );
   }
 });
 
@@ -109,6 +136,10 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Markdown script to be byte-for-byte unchanged/,
     /Place scene takes at the new scene\s+starts/,
     /Preserve the prior session on every\s+success or failure/,
+    /Lifecycle-managed apps must not inherit the agent's complete environment/,
+    /Never add a\s+wildcard ambient-environment pass-through/,
+    /authorization never appears in a query string, browser\s+history, server request URL, chat, or CLI output/,
+    /authorization-redacted diagnostics remain in local server logs/,
   ]) {
     assert.match(SKILL, pattern);
   }
@@ -143,6 +174,9 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Never use\s+`NODE_TLS_REJECT_UNAUTHORIZED=0`/,
     /`narration\.mode` is `macos-say`, `kokoro`, `clips`, `reference`, or\s+`silent`/,
     /Install\/update runs\s+`kokoro-setup`/,
+    /minimal startup environment rather than the agent's\s+complete ambient environment/,
+    /There is intentionally no wildcard or “inherit everything” setting/,
+    /same-name mapping is the migration\s+escape hatch/,
   ]) {
     assert.match(MANIFEST, pattern);
   }
@@ -203,6 +237,9 @@ test('skill documents watchable and resilient driver defaults', () => {
     /one prompt drives the whole\s+workflow/,
     /copies all take\s+history and selections into a new\s+session/,
     /continuous full take cannot safely follow shifted scene starts/,
+    /mode-0600 temporary launcher carries a one-use, short-lived\s+bootstrap value/,
+    /Authorization values never appear in HTTP request URLs, the normal\s+browser history, or command output/,
+    /Printed loopback URLs are informational and no longer authenticate/,
   ]) {
     assert.match(VOICEOVER, pattern);
   }

@@ -52,6 +52,17 @@ function manifest() {
 
 test('accepts environment references and version compatibility', () => {
   assert.deepEqual(validateManifestObject(manifest()), { valid: true, errors: [] });
+
+  const lifecycle = manifest();
+  lifecycle.app.lifecycle = {
+    mode: 'command',
+    start: ['npm', 'run', 'dev'],
+    env: {
+      API_TOKEN: 'PRODUCT_DEMO_API_TOKEN',
+      NODE_ENV: 'PRODUCT_DEMO_NODE_ENV',
+    },
+  };
+  assert.deepEqual(validateManifestObject(lifecycle), { valid: true, errors: [] });
 });
 
 test('accepts only a boolean per-demo insecure TLS option', () => {

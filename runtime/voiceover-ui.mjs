@@ -1,4 +1,49 @@
-export function voiceoverStudioHtml(token) {
+export function voiceoverBootstrapHtml() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Opening Demo Voiceover Studio</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    body { display: grid; min-height: 100vh; margin: 0; place-items: center; background: #0b0d12; color: #f6f7fb; }
+    main { max-width: 560px; padding: 32px; text-align: center; }
+    p { color: #b9c2d3; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Opening voiceover studio…</h1>
+    <p id="status">Establishing a private local session.</p>
+  </main>
+  <script>
+    let bootstrap = new URLSearchParams(window.location.hash.slice(1)).get('bootstrap');
+    window.history.replaceState(null, '', window.location.pathname);
+    const status = document.getElementById('status');
+    if (!bootstrap) {
+      status.textContent = 'This launch link is missing or expired. Ask your agent to reopen the studio.';
+    } else {
+      fetch('/auth/session', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ bootstrap }),
+      }).then((response) => {
+        bootstrap = null;
+        if (!response.ok) throw new Error('authorization failed');
+        window.location.replace('/');
+      }).catch(() => {
+        bootstrap = null;
+        status.textContent = 'The private launch expired. Ask your agent to reopen the studio.';
+      });
+    }
+  </script>
+</body>
+</html>`;
+}
+
+export function voiceoverStudioHtml() {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -112,9 +157,9 @@ export function voiceoverStudioHtml(token) {
     </aside>
   </main>
   <script>
-    const token = ${JSON.stringify(token)};
-    const withToken = (pathname) =>
-      pathname + (pathname.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
     const video = document.getElementById('video');
     const status = document.getElementById('status');
     const stopButton = document.getElementById('stop');
@@ -146,7 +191,7 @@ export function voiceoverStudioHtml(token) {
     let uploading = false;
     let stopMonitor;
 
-    video.src = withToken('/video');
+    video.src = '/video';
     video.muted = true;
     video.volume = 0;
     video.addEventListener('volumechange', () => {
@@ -190,7 +235,7 @@ export function voiceoverStudioHtml(token) {
     };
 
     async function refresh() {
-      session = await fetch(withToken('/api/session')).then((response) => response.json());
+      session = await fetch('/api/session').then((response) => response.json());
       selectedScene ||= session.prompts[0]?.sceneId;
       render();
       updatePrompt();
@@ -250,9 +295,7 @@ export function voiceoverStudioHtml(token) {
       const take = session.takes.find((entry) => entry.id === takeId);
       if (!take) throw new Error('The selected take is no longer available');
       playingTakeId = takeId;
-      takePlayer.src = withToken(
-        '/api/take-audio?takeId=' + encodeURIComponent(takeId),
-      );
+      takePlayer.src = '/api/take-audio?takeId=' + encodeURIComponent(takeId);
       syncTakePlaybackButtons();
       try {
         await takePlayer.play();
@@ -389,7 +432,7 @@ export function voiceoverStudioHtml(token) {
           if (preparing || recording || uploading) return;
           const allowOverlong = button.hasAttribute('data-overlong');
           stopTakePlayback();
-          const response = await fetch(withToken('/api/accept'), {
+          const response = await fetch('/api/accept', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
@@ -420,7 +463,7 @@ export function voiceoverStudioHtml(token) {
           if (preparing || recording || uploading) return;
           if (!window.confirm('Permanently delete this recorded take?')) return;
           stopTakePlayback();
-          const response = await fetch(withToken('/api/delete-take'), {
+          const response = await fetch('/api/delete-take', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ takeId: button.dataset.deleteTake }),
@@ -436,7 +479,7 @@ export function voiceoverStudioHtml(token) {
       for (const button of document.querySelectorAll('[data-clear-master], [data-clear-scene]')) {
         button.addEventListener('click', async () => {
           if (preparing || recording || uploading) return;
-          const response = await fetch(withToken('/api/unaccept'), {
+          const response = await fetch('/api/unaccept', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(button.hasAttribute('data-clear-master')
@@ -719,7 +762,6 @@ export function voiceoverStudioHtml(token) {
       }
       const blob = new Blob(chunks, { type: recorder.mimeType || chunks[0]?.type || 'audio/webm' });
       const query = new URLSearchParams({
-        token,
         kind: current.kind,
         sceneId: current.sceneId ?? '',
         videoOffsetMs: String(current.videoOffsetMs),
@@ -779,7 +821,7 @@ export function voiceoverStudioHtml(token) {
       stopTakePlayback();
       useLatest.disabled = true;
       try {
-        const response = await fetch(withToken('/api/accept-latest'), {
+        const response = await fetch('/api/accept-latest', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ cleanup: cleanupTakes.checked }),
@@ -842,7 +884,7 @@ export function voiceoverStudioHtml(token) {
         return;
       }
       try {
-        const response = await fetch(withToken('/api/complete'), {
+        const response = await fetch('/api/complete', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ allowMissing: uncovered.length > 0 }),

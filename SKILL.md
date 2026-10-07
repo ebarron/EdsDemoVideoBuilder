@@ -49,6 +49,13 @@ chat output, or command line. Pass only environment-variable names in
 `auth.env`. Prefer an isolated fixture. Login and presentation setup happen in
 an unrecorded context.
 
+Lifecycle-managed apps must not inherit the agent's complete environment.
+Keep the portable startup baseline and populate `app.lifecycle.env` with
+name-only source mappings for every app-specific variable the inspected startup
+requires. Infer and maintain those mappings in managed configuration; ask only
+when a credential or required variable cannot be determined. Never add a
+wildcard ambient-environment pass-through.
+
 For a known self-signed demo endpoint, set `app.allowInsecureTls: true`. This
 scopes certificate bypass to that manifest's preflight/lifecycle URL checks and
 Playwright preparation/recording contexts. Never set
@@ -313,6 +320,13 @@ its manifest, confirm the finished synthetic video and timeline are available,
 then open the studio. Ask only which demo to use when multiple plausible
 picture-lock candidates exist.
 
+Keep Studio loopback-only and authenticated. Launch it through its private
+one-use bootstrap so authorization never appears in a query string, browser
+history, server request URL, chat, or CLI output. Do not expose or ask the user
+to copy a token. If the short-lived launch expires, reopen it from the prompt.
+Browser/API failures must return stable sanitized messages while detailed,
+authorization-redacted diagnostics remain in local server logs.
+
 Commands in this section are agent-only implementation details. Never ask the
 user to run Node, name `--rebase`, or manually chain workflow commands.
 
@@ -414,7 +428,7 @@ recorded audio.
 
 ## Sharing
 
-The canonical private repository is
+The public source repository is
 `https://github.com/ebarron/EdsDemoVideoBuilder`. Read
 [references/sharing.md](references/sharing.md) for the supported macOS
 user-level installation and update commands.

@@ -177,6 +177,7 @@ async function main() {
     });
     console.log(JSON.stringify({
       voiceoverStudio: studio.url,
+      ...(options['no-open'] ? { privateLauncher: studio.launcher } : {}),
       session: studio.directory,
       created: studio.created,
       rebased: studio.rebased,

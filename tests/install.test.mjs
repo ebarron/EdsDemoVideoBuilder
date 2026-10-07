@@ -132,18 +132,78 @@ test('browser TLS bypass is scoped to the manifest option', () => {
   );
 });
 
-test('repository ignores generated demos, captures, media, and auth state', () => {
-  const ignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
-  for (const pattern of [
-    /^node_modules\/$/m,
-    /^\.kokoro-runtime\/$/m,
-    /^\/demos\/$/m,
-    /^playwright-report\/$/m,
-    /^\*\*\/storage-state\*\.json$/m,
-    /^\*\*\/\*-voiceover\/$/m,
-    /^\*\*\/\*\.mp4$/m,
-    /^\*\*\/\*\.wav$/m,
-  ]) {
-    assert.match(ignore, pattern);
+test('repository ignores generated artifacts without hiding source media', () => {
+  const generated = {
+    dependencies: [
+      'node_modules/example/index.js',
+      '.kokoro-runtime/node_modules/example/index.js',
+    ],
+    playwright: [
+      'playwright-report/index.html',
+      'test-results/run/screenshot.png',
+      'blob-report/report.zip',
+      '.playwright/cache/browser',
+      'artifacts/trace.zip',
+    ],
+    recording: [
+      'demos/example/demo.yaml',
+      'output/example.mp4',
+      'captures/frame.png',
+      'raw/take.webm',
+      'scratch/click-evidence/001-save.png',
+      'scratch/example-timeline.json',
+      'scratch/example-contact-sheet.png',
+    ],
+    voiceover: [
+      'output/example-voiceover/sessions/one/takes/opening.wav',
+      'output/example-human.mp4',
+      'scratch/.studio-launch-private.html',
+      'scratch/.studio.lock',
+    ],
+    localState: [
+      '.env.local',
+      '.auth/browser.json',
+      'auth-state-local.json',
+      'account-storage-state.json',
+    ],
+    transient: [
+      'coverage/lcov.info',
+      '.nyc_output/process.json',
+      'logs/recording.log',
+      'scratch/app-lifecycle.log',
+      'scratch/scene-plan.json.tmp-123',
+      'tmp/session.json',
+    ],
+  };
+  const sourceExamples = [
+    '.env.test.example',
+    'docs/video/example.mp4',
+    'examples/narration.wav',
+    'tests/fixtures/capture.har',
+    'tests/fixtures/take.webm',
+  ];
+  const candidates = [...Object.values(generated).flat(), ...sourceExamples];
+  const check = spawnSync(
+    'git',
+    ['-C', ROOT, 'check-ignore', '--no-index', '-z', '--stdin'],
+    { input: `${candidates.join('\0')}\0`, encoding: 'utf8' },
+  );
+  assert.ok([0, 1].includes(check.status), check.stderr);
+  const ignored = new Set(check.stdout.split('\0').filter(Boolean));
+  for (const [category, paths] of Object.entries(generated)) {
+    for (const file of paths) {
+      assert.equal(ignored.has(file), true, `${category} artifact is not ignored: ${file}`);
+    }
   }
+  for (const file of sourceExamples) {
+    assert.equal(ignored.has(file), false, `source example is unexpectedly ignored: ${file}`);
+  }
+
+  const trackedIgnored = spawnSync(
+    'git',
+    ['-C', ROOT, 'ls-files', '-ci', '--exclude-standard'],
+    { encoding: 'utf8' },
+  );
+  assert.equal(trackedIgnored.status, 0, trackedIgnored.stderr);
+  assert.equal(trackedIgnored.stdout, '', 'tracked source is hidden by .gitignore');
 });

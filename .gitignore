@@ -1,8 +1,8 @@
 # Dependencies and package-manager state
 node_modules/
-.kokoro-runtime/
-.npm/
-.npmrc
+/.kokoro-runtime/
+/.npm/
+/.npmrc
 npm-debug.log*
 
 # Playwright reports, caches, and captures
@@ -10,8 +10,8 @@ playwright-report/
 test-results/
 blob-report/
 .playwright/
-**/*.webm
-**/*.har
+trace.zip
+trace-*.zip
 
 # Generated demo work and per-application output
 /demos/
@@ -21,29 +21,45 @@ blob-report/
 **/*-voiceover/
 **/scene-plan.json
 **/building-the-video.md
+**/*-timeline.json
+**/*-contact-sheet.png
+**/*-human.mp4
+**/*-human.mov
+**/*-human.mkv
+**/*-human.avi
+**/click-evidence/
+**/video-path.txt
+**/finish-filter.txt
+**/rejected-take.json
 **/*.bak-*
 **/*.tmp-*
+/.tmp/
+/tmp/
+/temp/
+*.tmp
+*.temp
 
 # Authentication and temporary browser state
 .env
 .env.*
 !.env.example
+!.env.*.example
 **/.auth/
 **/auth-state*.json
 **/storage-state*.json
 **/*-storage-state.json
+**/.studio-launch-*.html
+**/.studio.lock
 
-# Video and audio artifacts
-**/*.mp4
-**/*.mov
-**/*.mkv
-**/*.avi
-**/*.aiff
-**/*.aif
-**/*.wav
-**/*.m4a
-**/*.mp3
+# Test, coverage, and process output
+/coverage/
+/.nyc_output/
+/logs/
+/*.log
+**/app-lifecycle.log
 
 # OS/editor noise
 .DS_Store
 *.swp
+*.swo
+*~
