@@ -57,10 +57,21 @@ export function voiceoverStudioHtml() {
     main { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, .8fr); min-height: 100vh; }
     .stage { padding: 24px; display: flex; flex-direction: column; gap: 18px; }
     video { width: 100%; max-height: 62vh; background: #000; border-radius: 12px; box-shadow: 0 16px 50px #0009; }
-    .prompt { min-height: 180px; display: grid; align-content: center; text-align: center; padding: 24px 8%; background: #151922; border: 1px solid #2a3040; border-radius: 12px; }
+    .prompt { position: relative; min-height: 180px; display: grid; align-content: center; text-align: center; padding: 24px 8%; background: #151922; border: 1px solid #2a3040; border-radius: 12px; }
     .prompt h1 { color: #8fb8ff; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 14px; }
     .prompt p { font-size: clamp(24px, 2.4vw, 42px); line-height: 1.32; margin: 0; }
     .next { color: #9da6b8; margin-top: 16px; font-size: 15px; }
+    .prompt-actions { position: absolute; top: 14px; right: 14px; display: flex; gap: 6px; }
+    .prompt-actions button { padding: 7px 10px; font-size: 12px; }
+    .prompt-cue-editors { overflow: hidden; border: 1px solid #4d6fa9; border-radius: 9px; background: #111722; }
+    .prompt-cue-editors label { margin: 0; }
+    .prompt-cue-editors textarea { display: block; width: 100%; min-height: 72px; resize: vertical; border: 0; border-bottom: 1px solid #303d52; padding: 12px; background: transparent; color: #f6f7fb; font: inherit; font-size: clamp(20px, 2vw, 34px); line-height: 1.32; text-align: center; }
+    .prompt-cue-editors label:last-child textarea { border-bottom: 0; }
+    .prompt-cue-editors textarea:focus { outline: 2px solid #6da0ff; outline-offset: -2px; }
+    .narration-feedback { color: #8fb8ff; font-size: 13px; margin-top: 9px; }
+    .narration-feedback:empty { display: none; }
+    .narration-feedback.error { color: #ff9bab; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     aside { border-left: 1px solid #252b38; background: #11141b; padding: 22px; overflow: auto; max-height: 100vh; }
     h2 { margin: 0 0 14px; font-size: 20px; }
     .studio-toolbar { position: sticky; top: -22px; z-index: 5; margin: -22px -22px 0; padding: 22px 22px 10px; background: #11141bf5; border-bottom: 1px solid #252b38; box-shadow: 0 10px 18px #080a0e99; backdrop-filter: blur(8px); }
@@ -121,8 +132,16 @@ export function voiceoverStudioHtml() {
     <section class="stage">
       <video id="video" controls muted playsinline></video>
       <div class="prompt">
+        <div class="prompt-actions">
+          <button id="edit-narration" class="secondary" type="button">Edit</button>
+          <button id="cancel-narration" class="secondary" type="button" hidden>Cancel</button>
+        </div>
         <h1 id="prompt-title">Loading voiceover session…</h1>
         <p id="prompt-text"></p>
+        <form id="narration-editor-form" hidden>
+          <div id="narration-cue-editors" class="prompt-cue-editors"></div>
+        </form>
+        <div id="narration-feedback" class="narration-feedback" role="status" aria-live="polite"></div>
         <div class="next" id="next-text"></div>
       </div>
     </section>
@@ -130,8 +149,8 @@ export function voiceoverStudioHtml() {
       <div class="studio-toolbar">
         <h2>Voiceover studio</h2>
         <div class="controls">
-          <button id="record-master">Record full take</button>
-          <button id="record-scene" class="secondary">Record selected scene</button>
+          <button id="record-scene">Record selected scene</button>
+          <button id="record-master" class="secondary">Record full take</button>
           <button id="stop" class="danger" disabled>Stop</button>
           <button id="use-latest" class="secondary">Use latest eligible takes</button>
         </div>
@@ -171,11 +190,18 @@ export function voiceoverStudioHtml() {
     const copyStatus = document.getElementById('copy-status');
     const recordMaster = document.getElementById('record-master');
     const recordScene = document.getElementById('record-scene');
+    const editNarration = document.getElementById('edit-narration');
+    const narrationEditorForm = document.getElementById('narration-editor-form');
+    const narrationCueEditors = document.getElementById('narration-cue-editors');
+    const cancelNarration = document.getElementById('cancel-narration');
+    const narrationFeedback = document.getElementById('narration-feedback');
+    const promptText = document.getElementById('prompt-text');
     const microphone = document.getElementById('microphone');
     const countdown = document.getElementById('countdown');
     const takePlayer = document.getElementById('take-player');
     let session;
     let selectedScene;
+    let visiblePromptScene;
     let pinnedPromptScene;
     let playingTakeId = null;
     let stream;
@@ -190,6 +216,10 @@ export function voiceoverStudioHtml() {
     let stopping = false;
     let uploading = false;
     let stopMonitor;
+    let narrationEditing = false;
+    let narrationSaving = false;
+    let narrationEditScene = null;
+    let narrationOriginalCues = [];
 
     video.src = '/video';
     video.muted = true;
@@ -234,9 +264,146 @@ export function voiceoverStudioHtml() {
       return Math.floor(value / 60) + ':' + String(Math.floor(value % 60)).padStart(2, '0');
     };
 
+    function selectedPrompt() {
+      return session?.prompts.find((entry) => entry.sceneId === selectedScene) ?? null;
+    }
+
+    function authoringScene(sceneId) {
+      return session?.authoring?.scenes?.[sceneId] ?? null;
+    }
+
+    function narrationValues() {
+      return [...narrationCueEditors.querySelectorAll('textarea')].map((textarea) => ({
+        id: textarea.dataset.cueId,
+        text: textarea.value,
+      }));
+    }
+
+    function narrationIsDirty() {
+      if (!narrationEditing) return false;
+      const values = narrationValues();
+      return values.some(
+        (cue, index) =>
+          cue.id !== narrationOriginalCues[index]?.id ||
+          cue.text !== narrationOriginalCues[index]?.text,
+      );
+    }
+
+    function setNarrationFeedback(message, error = false) {
+      narrationFeedback.textContent = message;
+      narrationFeedback.classList.toggle('error', error);
+    }
+
+    function renderNarrationEditor() {
+      const sceneId = narrationEditing
+        ? narrationEditScene
+        : visiblePromptScene ?? selectedScene;
+      const prompt = session?.prompts.find((entry) => entry.sceneId === sceneId) ?? null;
+      const authoring = authoringScene(sceneId);
+      const recordingBusy = preparing || Boolean(recording) || uploading;
+      const unavailable =
+        authoring?.message ?? 'This visible narration cannot be safely mapped to Markdown.';
+      editNarration.textContent = narrationEditing
+        ? narrationSaving ? 'Saving…' : 'Save'
+        : 'Edit';
+      editNarration.classList.toggle('secondary', !narrationEditing);
+      editNarration.disabled =
+        !prompt ||
+        !authoring?.editable ||
+        recordingBusy ||
+        narrationSaving;
+      editNarration.title = !authoring?.editable
+        ? unavailable
+        : recordingBusy
+          ? 'Narration editing is unavailable while recording or processing a take'
+          : narrationEditing
+            ? 'Save this visible narration to the backing Markdown script'
+            : 'Edit this visible narration';
+      editNarration.setAttribute(
+        'aria-label',
+        !authoring?.editable
+          ? 'Narration editing unavailable: ' + unavailable
+          : recordingBusy
+            ? 'Narration editing unavailable while recording'
+            : narrationEditing ? 'Save narration' : 'Edit narration',
+      );
+      cancelNarration.hidden = !narrationEditing;
+      cancelNarration.disabled = narrationSaving;
+      narrationEditorForm.hidden = !narrationEditing;
+      promptText.hidden = narrationEditing;
+      if (!narrationEditing) {
+        narrationCueEditors.innerHTML = '';
+        narrationEditorForm.dataset.scene = '';
+        return;
+      }
+      if (narrationEditorForm.dataset.scene !== narrationEditScene) {
+        narrationCueEditors.innerHTML = authoring.cues.map((cue, index) =>
+          '<label for="narration-cue-' + index + '">' +
+          '<span class="sr-only">Spoken cue ' + (index + 1) + ' of ' +
+          authoring.cues.length + ' for ' + escapeHtml(prompt.title) + '</span>' +
+          '<textarea id="narration-cue-' + index + '" data-cue-id="' +
+          escapeHtml(cue.id) + '" aria-describedby="narration-feedback" required>' +
+          escapeHtml(cue.text) +
+          '</textarea></label>',
+        ).join('');
+        narrationEditorForm.dataset.scene = narrationEditScene;
+      }
+      for (const textarea of narrationCueEditors.querySelectorAll('textarea')) {
+        textarea.disabled = narrationSaving;
+      }
+    }
+
+    function beginNarrationEdit() {
+      if (preparing || recording || uploading || narrationSaving) return;
+      const sceneId = visiblePromptScene ?? selectedScene;
+      const authoring = authoringScene(sceneId);
+      if (!authoring?.editable) {
+        setNarrationFeedback(
+          authoring?.message ?? 'This visible narration cannot be safely mapped to Markdown.',
+          true,
+        );
+        return;
+      }
+      stopTakePlayback();
+      video.pause();
+      selectedScene = sceneId;
+      pinnedPromptScene = sceneId;
+      narrationEditing = true;
+      narrationEditScene = sceneId;
+      narrationOriginalCues = authoring.cues.map((cue) => ({ ...cue }));
+      narrationEditorForm.dataset.scene = '';
+      setNarrationFeedback('');
+      render();
+      narrationCueEditors.querySelector('textarea')?.focus();
+    }
+
+    function cancelNarrationEdit({ confirmLoss = true } = {}) {
+      if (
+        confirmLoss &&
+        narrationIsDirty() &&
+        !window.confirm('Discard the unsaved narration changes?')
+      ) {
+        return false;
+      }
+      narrationEditing = false;
+      narrationEditScene = null;
+      narrationOriginalCues = [];
+      narrationEditorForm.dataset.scene = '';
+      setNarrationFeedback('Narration changes canceled.');
+      render();
+      updatePrompt();
+      return true;
+    }
+
+    function canChangeScene() {
+      return !narrationEditing || cancelNarrationEdit({ confirmLoss: true });
+    }
+
     async function refresh() {
       session = await fetch('/api/session').then((response) => response.json());
-      selectedScene ||= session.prompts[0]?.sceneId;
+      if (!session.prompts.some((prompt) => prompt.sceneId === selectedScene)) {
+        selectedScene = session.prompts[0]?.sceneId ?? null;
+      }
       render();
       updatePrompt();
     }
@@ -247,6 +414,7 @@ export function voiceoverStudioHtml() {
           (entry) =>
             entry.kind === 'scene' &&
             entry.sceneId === prompt.sceneId &&
+            entry.stale !== true &&
             entry.fit.status !== 'over',
         );
         const hasOtherTakes = take && session.takes.some(
@@ -265,7 +433,9 @@ export function voiceoverStudioHtml() {
     }
 
     function syncTakePlaybackButtons() {
-      const busy = Boolean(preparing || recording || uploading);
+      const busy = Boolean(
+        preparing || recording || uploading || narrationEditing || narrationSaving
+      );
       useLatest.disabled = busy || latestEligibleChanges().length === 0;
       for (const button of document.querySelectorAll('[data-play-take]')) {
         button.disabled =
@@ -346,7 +516,7 @@ export function voiceoverStudioHtml() {
         ? '<p>Accepted full take <span class="pill ' + master.fit.status + '">' +
           master.fit.status + ' · ' + master.effectiveDuration.toFixed(1) +
           's</span> <button class="secondary" data-clear-master>Clear full take</button></p>'
-        : '<p>No full take accepted. Record one full take, or record every scene.</p>') +
+        : '<p>No full take accepted. Record each scene (recommended), or use a full take as an optional base.</p>') +
         masterHistory;
       document.getElementById('scenes').innerHTML = session.prompts.map((prompt) => {
         const sceneTakes = [...session.takes].reverse().filter(
@@ -354,7 +524,7 @@ export function voiceoverStudioHtml() {
         );
         const acceptedTakeId = session.accepted.scenes[prompt.sceneId];
         const acceptedTake = session.takes.find((candidate) => candidate.id === acceptedTakeId);
-        const latestTake = sceneTakes[0];
+        const latestTake = sceneTakes.find((take) => take.stale !== true) ?? sceneTakes[0];
         const reviewTake = latestTake ?? acceptedTake;
         let fit = '<span class="pill">not recorded</span>';
         if (acceptedTake) {
@@ -366,11 +536,12 @@ export function voiceoverStudioHtml() {
               : '') + '</span>';
         }
         if (latestTake && latestTake.id !== acceptedTakeId) {
-          const latestFit = '<span class="pill ' + latestTake.fit.status +
-            '">review latest · ' +
+          const latestFit = '<span class="pill ' +
+            (latestTake.stale ? 'over' : latestTake.fit.status) + '">' +
+            (latestTake.stale ? 'stale wording · ' : 'review latest · ') +
             latestTake.effectiveDuration.toFixed(1) + '/' +
             prompt.windowDuration.toFixed(1) + 's' +
-            (latestTake.fit.status === 'over'
+            (!latestTake.stale && latestTake.fit.status === 'over'
               ? ' · over by ' + Math.max(0, latestTake.fit.delta).toFixed(2) + 's'
               : '') + '</span>';
           fit = acceptedTake ? fit + latestFit : latestFit;
@@ -383,12 +554,18 @@ export function voiceoverStudioHtml() {
             '" aria-label="Stop latest take for ' + escapeHtml(prompt.title) +
             '" disabled>Stop</button>' +
             '<button class="secondary" data-take="' + escapeHtml(reviewTake.id) + '"' +
-            (reviewTake.fit.status === 'over'
+            (!reviewTake.stale && reviewTake.fit.status === 'over'
               ? ' data-overlong="' + Math.max(0, reviewTake.fit.delta) + '"'
               : '') +
-            (reviewTake.id === acceptedTakeId ? ' disabled' : '') + '>' +
+            (reviewTake.id === acceptedTakeId || reviewTake.stale
+              ? ' disabled title="' +
+                (reviewTake.stale
+                  ? 'Narration changed after this take was recorded'
+                  : 'This take is already in use') + '"'
+              : '') + '>' +
             (reviewTake.id === acceptedTakeId
               ? 'In use'
+              : reviewTake.stale ? 'Stale'
               : reviewTake.fit.status === 'over' ? 'Use anyway' : 'Use') +
             '</button></span>'
           : '';
@@ -406,6 +583,7 @@ export function voiceoverStudioHtml() {
       for (const button of document.querySelectorAll('[data-scene]')) {
         button.addEventListener('click', () => {
           if (preparing || recording || uploading) return;
+          if (button.dataset.scene !== selectedScene && !canChangeScene()) return;
           stopTakePlayback();
           selectedScene = button.dataset.scene;
           pinnedPromptScene = selectedScene;
@@ -493,9 +671,17 @@ export function voiceoverStudioHtml() {
           await refresh();
         });
       }
-      for (const button of document.querySelectorAll('#scenes button, #master button')) {
-        button.disabled ||= Boolean(preparing || recording || uploading);
+      const busy = Boolean(preparing || recording || uploading);
+      for (const button of document.querySelectorAll('#scenes button:not([data-scene]), #master button')) {
+        button.disabled ||= busy || narrationEditing || narrationSaving;
       }
+      for (const button of document.querySelectorAll('[data-scene]')) {
+        button.disabled ||= busy || narrationSaving;
+      }
+      recordScene.disabled = busy || narrationEditing || narrationSaving || !selectedPrompt();
+      recordMaster.disabled = busy || narrationEditing || narrationSaving;
+      completeButton.disabled = busy || narrationEditing || narrationSaving;
+      renderNarrationEditor();
       syncTakePlaybackButtons();
     }
 
@@ -509,17 +695,24 @@ export function voiceoverStudioHtml() {
         (take.fit.status === 'over'
           ? ' by ' + Math.max(0, take.fit.delta).toFixed(2) + 's'
           : '') +
+        (take.stale ? '<span class="pill over">stale wording</span>' : '') +
         (accepted ? '<span class="pill">in use</span>' : '') +
         '</span><span class="take-actions">' +
         '<button class="secondary" data-play-take="' + takeId + '">Play</button>' +
         '<button class="secondary" data-stop-take="' + takeId + '" disabled>Stop</button>' +
         '<button class="secondary" data-take="' + takeId + '"' +
-        (take.fit.status === 'over'
+        (!take.stale && take.fit.status === 'over'
           ? ' data-overlong="' + Math.max(0, take.fit.delta) + '"'
           : '') +
-        (accepted ? ' disabled' : '') +
+        (accepted || take.stale
+          ? ' disabled title="' +
+            (take.stale
+              ? 'Narration changed after this take was recorded'
+              : 'This take is already in use') + '"'
+          : '') +
         '>' + (accepted
           ? 'In use'
+          : take.stale ? 'Stale'
           : take.fit.status === 'over' ? 'Use anyway' : 'Use') + '</button>' +
         '<button class="danger" data-delete-take="' + takeId + '"' +
         (accepted ? ' disabled title="Replace or clear this in-use take first"' : '') +
@@ -538,6 +731,11 @@ export function voiceoverStudioHtml() {
 
     function updatePrompt() {
       if (!session) return;
+      if (narrationEditing) {
+        visiblePromptScene = narrationEditScene;
+        renderNarrationEditor();
+        return;
+      }
       const time = video.currentTime;
       let index = -1;
       if (pinnedPromptScene) {
@@ -566,14 +764,107 @@ export function voiceoverStudioHtml() {
       if (index < 0) index = session.prompts.length - 1;
       const prompt = session.prompts[index];
       const next = session.prompts[index + 1];
+      const previousVisibleScene = visiblePromptScene;
+      visiblePromptScene = prompt?.sceneId ?? null;
+      if (
+        previousVisibleScene &&
+        visiblePromptScene !== previousVisibleScene
+      ) {
+        setNarrationFeedback('');
+      }
       document.getElementById('prompt-title').textContent = prompt?.title ?? 'Complete';
-      document.getElementById('prompt-text').textContent = prompt?.text ?? '';
+      promptText.textContent = prompt?.text ?? '';
       document.getElementById('next-text').textContent = next ? 'Next: ' + next.text : '';
+      renderNarrationEditor();
     }
     video.addEventListener('timeupdate', updatePrompt);
     video.addEventListener('ended', () => {
       if (recording?.kind === 'master') stopRecording();
     });
+
+    async function saveNarrationEdit() {
+      if (!narrationEditing || narrationSaving) return;
+      const sceneId = narrationEditScene;
+      const values = narrationValues();
+      if (values.some((cue) => !cue.text.trim())) {
+        setNarrationFeedback('Spoken narration cannot be empty.', true);
+        narrationCueEditors.querySelector('textarea:invalid')?.focus();
+        return;
+      }
+      if (!narrationIsDirty()) {
+        narrationEditing = false;
+        narrationEditScene = null;
+        narrationOriginalCues = [];
+        narrationEditorForm.dataset.scene = '';
+        setNarrationFeedback('Narration already matches the backing Markdown.');
+        render();
+        updatePrompt();
+        return;
+      }
+      const affected = session.takes.filter(
+        (take) =>
+          take.stale !== true &&
+          (take.kind === 'master' || take.sceneId === sceneId),
+      );
+      const affectedSceneTakes = affected.filter((take) => take.kind === 'scene').length;
+      const affectedFullTakes = affected.filter((take) => take.kind === 'master').length;
+      if (
+        affected.length &&
+        !window.confirm(
+          'Saving new wording will keep the old audio as history but mark ' +
+          affectedSceneTakes + ' take' + (affectedSceneTakes === 1 ? '' : 's') +
+          ' for this scene and ' + affectedFullTakes + ' full take' +
+          (affectedFullTakes === 1 ? '' : 's') +
+          ' as stale and ineligible. Affected selections will be cleared. Continue?',
+        )
+      ) {
+        setNarrationFeedback('Save canceled. Existing recordings remain unchanged.');
+        return;
+      }
+      narrationSaving = true;
+      setNarrationFeedback('Saving narration…');
+      render();
+      try {
+        const authoringScene = session.authoring.scenes[sceneId];
+        const response = await fetch('/api/narration', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            sceneId,
+            cues: values,
+            expectedScriptHash: session.authoring.scriptHash,
+            expectedScenePlanHash: session.authoring.scenePlanHash,
+            expectedNarrationRevision: authoringScene.narrationRevision,
+            confirmTakeInvalidation: affected.length > 0,
+          }),
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const result = await response.json();
+        session = result.state;
+        narrationEditing = false;
+        narrationEditScene = null;
+        narrationOriginalCues = [];
+        narrationEditorForm.dataset.scene = '';
+        narrationSaving = false;
+        render();
+        updatePrompt();
+        const invalidated = result.invalidated;
+        const detail = invalidated?.takes?.length
+          ? ' Prior affected audio remains in history and is marked stale.'
+          : '';
+        setNarrationFeedback(
+          result.changed
+            ? 'Narration saved to the backing Markdown script.' + detail
+            : 'Narration already matches the backing Markdown.',
+        );
+        status.textContent =
+          'Saved the selected scene wording. The teleprompter is updated; locked video timing is unchanged.';
+      } catch (error) {
+        narrationSaving = false;
+        render();
+        setNarrationFeedback('Could not save narration: ' + error.message, true);
+      }
+    }
 
     async function ensureMicrophone() {
       if (stream) return stream;
@@ -653,12 +944,26 @@ export function voiceoverStudioHtml() {
 
     async function beginRecording(kind) {
       if (preparing || recorder?.state === 'recording') return;
+      if (narrationEditing || narrationSaving) {
+        status.textContent = 'Save or cancel the narration edit before recording.';
+        return;
+      }
+      if (!selectedScene && session.prompts.length) {
+        selectedScene = session.prompts[0].sceneId;
+        pinnedPromptScene = selectedScene;
+        render();
+        updatePrompt();
+      }
       const prompt = session.prompts.find((entry) => entry.sceneId === selectedScene);
-      if (kind === 'scene' && !prompt) return;
+      if (kind === 'scene' && !prompt) {
+        status.textContent = 'Select a narrated scene before recording.';
+        return;
+      }
       try {
         stopTakePlayback();
         pinnedPromptScene = kind === 'scene' ? prompt.sceneId : null;
         preparing = true;
+        renderNarrationEditor();
         recordMaster.disabled = true;
         recordScene.disabled = true;
         microphone.disabled = true;
@@ -699,6 +1004,7 @@ export function voiceoverStudioHtml() {
         recording.videoOffsetMs = performance.now() - recordingStarted;
         recorder.addEventListener('stop', uploadRecording, { once: true });
         preparing = false;
+        renderNarrationEditor();
         syncTakePlaybackButtons();
         stopButton.disabled = false;
         status.textContent = kind === 'master'
@@ -720,6 +1026,7 @@ export function voiceoverStudioHtml() {
         microphone.disabled = false;
         recordMaster.disabled = false;
         recordScene.disabled = false;
+        renderNarrationEditor();
         syncTakePlaybackButtons();
         throw new Error(
           'Locked video could not start; microphone take was discarded: ' + error.message,
@@ -804,6 +1111,11 @@ export function voiceoverStudioHtml() {
     recordScene.addEventListener('click', () => beginRecording('scene').catch((error) => {
       status.textContent = error.message;
     }));
+    editNarration.addEventListener('click', () => {
+      if (narrationEditing) saveNarrationEdit();
+      else beginNarrationEdit();
+    });
+    cancelNarration.addEventListener('click', () => cancelNarrationEdit({ confirmLoss: true }));
     useLatest.addEventListener('click', async () => {
       if (preparing || recording || uploading) return;
       const changes = latestEligibleChanges();
@@ -922,6 +1234,16 @@ export function voiceoverStudioHtml() {
     window.addEventListener('pagehide', () => {
       stopTakePlayback();
       releaseMicrophone();
+    });
+    window.addEventListener('beforeunload', (event) => {
+      if (!narrationIsDirty()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    });
+    window.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !narrationEditing || narrationSaving) return;
+      event.preventDefault();
+      cancelNarrationEdit({ confirmLoss: true });
     });
     refresh().catch((error) => { status.textContent = error.message; });
   </script>

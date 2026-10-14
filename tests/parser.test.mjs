@@ -87,6 +87,38 @@ test('does not treat ordinary Markdown links as inline directions', () => {
   assert.deepEqual(plan.scenes[0].cues.map((cue) => cue.kind), ['narration']);
 });
 
+test('reports exact narration source spans without consuming actions or CRLF formatting', () => {
+  const markdown = [
+    '# Opening',
+    '',
+    'Repeat this. [Click Analytics.] Repeat this with an [ordinary link](https://example.com).',
+    '',
+    '*[Open details.]*',
+    '',
+    '> Closing words.',
+    '',
+  ].join('\r\n');
+  const plan = parseDemoScript(markdown, { source: 'demo.md' });
+  const cues = plan.scenes[0].cues.filter((cue) => cue.kind === 'narration');
+  assert.deepEqual(cues.map((cue) => cue.text), [
+    'Repeat this.',
+    'Repeat this with an [ordinary link](https://example.com).',
+    'Closing words.',
+  ]);
+  assert.deepEqual(
+    cues.map((cue) => markdown.slice(cue.source.startOffset, cue.source.endOffset)),
+    [
+      'Repeat this.',
+      'Repeat this with an [ordinary link](https://example.com).',
+      'Closing words.',
+    ],
+  );
+  assert.deepEqual(
+    plan.scenes[0].actions.map((action) => action.direction),
+    ['Click Analytics.', 'Open details.'],
+  );
+});
+
 test('parses explicit JSON scene and action comments', () => {
   const plan = parseDemoScript(`<!-- demo:scene {"id":"proof","title":"Proof"} -->
 The outcome passed.

@@ -38,6 +38,52 @@ function hashFile(file) {
   return `sha256:${hash.digest('hex')}`;
 }
 
+function hashValue(value) {
+  return `sha256:${crypto.createHash('sha256').update(value).digest('hex')}`;
+}
+
+export function voiceoverSceneNarrationRevision(prompt) {
+  return hashValue(JSON.stringify([prompt.sceneId, prompt.text]));
+}
+
+export function voiceoverNarrationRevision(prompts) {
+  return hashValue(JSON.stringify(
+    prompts.map((prompt) => [prompt.sceneId, prompt.text]),
+  ));
+}
+
+function expectedTakeNarrationRevision(state, take) {
+  if (take.kind === 'master') return voiceoverNarrationRevision(state.prompts);
+  const prompt = state.prompts.find((entry) => entry.sceneId === take.sceneId);
+  return prompt ? voiceoverSceneNarrationRevision(prompt) : null;
+}
+
+export function isVoiceoverTakeCurrent(state, take) {
+  if (take.stale === true) return false;
+  const expected = expectedTakeNarrationRevision(state, take);
+  if (!expected) return false;
+  if (take.narrationRevision) return take.narrationRevision === expected;
+  return !state.narration?.editedAt;
+}
+
+export function stampLegacyTakeNarrationRevisions(state) {
+  let migrated = 0;
+  for (const take of state.takes ?? []) {
+    if (take.narrationRevision) continue;
+    take.narrationRevision = expectedTakeNarrationRevision(state, take);
+    migrated += 1;
+  }
+  if (migrated) {
+    state.narration ??= {
+      revision: voiceoverNarrationRevision(state.prompts),
+      openingRevision: voiceoverNarrationRevision(state.prompts),
+      editedAt: null,
+    };
+    state.narration.legacyTakesMigratedAt ??= new Date().toISOString();
+  }
+  return migrated;
+}
+
 function writeJson(file, value) {
   const temporary = `${file}.tmp-${process.pid}-${Date.now()}`;
   fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, {
@@ -148,6 +194,10 @@ export function readVoiceoverSession(manifest, sessionDirectory = null) {
   }
   const state = JSON.parse(fs.readFileSync(sessionFile(directory), 'utf8'));
   return { paths, directory, state };
+}
+
+export function writeVoiceoverSessionState(session) {
+  writeJson(sessionFile(session.directory), session.state);
 }
 
 function copyIfPresent(source, destination) {
@@ -293,8 +343,9 @@ export function createVoiceoverSession(
     files: lockFiles,
   });
   fs.chmodSync(lockManifest, 0o400);
+  const narrationRevision = voiceoverNarrationRevision(prompts);
   const state = {
-    version: 2,
+    version: 3,
     id,
     demoId: manifest.id,
     createdAt: new Date().toISOString(),
@@ -318,6 +369,11 @@ export function createVoiceoverSession(
       contactSheet: paths.contactSheet,
     },
     prompts,
+    narration: {
+      revision: narrationRevision,
+      openingRevision: narrationRevision,
+      editedAt: null,
+    },
     takes: [],
     accepted: { master: null, scenes: {} },
   };
@@ -438,6 +494,7 @@ export function rebaseVoiceoverSession(
   verifyPictureLock(previous);
   verifyAcceptedTakes(previous);
   const artifacts = verifiedTakeArtifacts(previous);
+  stampLegacyTakeNarrationRevisions(previous.state);
 
   requireFile(manifest.output.video, 'Revised synthetic video');
   requireFile(manifest.output.timeline, 'Revised finished timeline');
@@ -457,7 +514,9 @@ export function rebaseVoiceoverSession(
     previous.state.pictureLock.script ?? 'picture-lock/script.md',
   );
   requireFile(lockedScript, 'Locked Markdown narration');
-  if (hashFile(manifest.script) !== hashFile(lockedScript)) {
+  const authoritativeScriptHash =
+    previous.state.authoring?.scriptHash ?? hashFile(lockedScript);
+  if (hashFile(manifest.script) !== authoritativeScriptHash) {
     throw new Error('Voiceover rebase requires the Markdown script to be unchanged');
   }
 
@@ -524,6 +583,10 @@ export function rebaseVoiceoverSession(
     created.state.takes = takes;
     created.state.accepted = accepted;
     created.state.prompts = prompts;
+    created.state.narration = {
+      ...previous.state.narration,
+      revision: voiceoverNarrationRevision(prompts),
+    };
     created.state.completedAt = null;
     created.state.completionWarnings = uncoveredVoiceoverPrompts(created.state)
       .map((prompt) => ({ sceneId: prompt.sceneId, title: prompt.title }));
@@ -678,6 +741,9 @@ export function registerVoiceoverTake({
     duration,
     measuredDuration,
     effectiveDuration,
+    narrationRevision: kind === 'master'
+      ? voiceoverNarrationRevision(session.state.prompts)
+      : voiceoverSceneNarrationRevision(prompt),
     fit: kind === 'scene'
       ? voiceoverTimingFit(effectiveDuration, prompt.windowDuration)
       : voiceoverTimingFit(effectiveDuration, session.state.pictureLock.finalDuration),
@@ -687,7 +753,7 @@ export function registerVoiceoverTake({
   return {
     take,
     accepted: false,
-    eligible: take.fit.status !== 'over',
+    eligible: take.fit.status !== 'over' && isVoiceoverTakeCurrent(session.state, take),
     state: session.state,
   };
 }
@@ -776,6 +842,11 @@ export function acceptVoiceoverTake(
   const session = readVoiceoverSession(manifest, sessionDir);
   const take = session.state.takes.find((entry) => entry.id === takeId);
   if (!take) throw new Error(`Unknown voiceover take: ${takeId}`);
+  if (!isVoiceoverTakeCurrent(session.state, take)) {
+    throw new Error(
+      'This voiceover take uses stale narration and cannot be selected; record a new take',
+    );
+  }
   if (take.fit.status === 'over' && !allowOverlong) {
     throw new Error('An overlong voiceover take cannot be accepted; record a natural retake');
   }
@@ -810,6 +881,7 @@ export function acceptLatestEligibleVoiceoverTakes(
       (entry) =>
         entry.kind === 'scene' &&
         entry.sceneId === prompt.sceneId &&
+        isVoiceoverTakeCurrent(session.state, entry) &&
         entry.fit.status !== 'over',
     );
     if (!take) continue;
@@ -852,8 +924,15 @@ export function clearVoiceoverAcceptance(
 }
 
 export function uncoveredVoiceoverPrompts(state) {
-  if (state.accepted.master) return [];
-  return state.prompts.filter((prompt) => !state.accepted.scenes[prompt.sceneId]);
+  const master = state.accepted.master
+    ? state.takes.find((take) => take.id === state.accepted.master)
+    : null;
+  if (master && isVoiceoverTakeCurrent(state, master)) return [];
+  return state.prompts.filter((prompt) => {
+    const id = state.accepted.scenes[prompt.sceneId];
+    const take = id ? state.takes.find((entry) => entry.id === id) : null;
+    return !take || !isVoiceoverTakeCurrent(state, take);
+  });
 }
 
 export function completeVoiceoverSession(
@@ -882,6 +961,11 @@ export function completeVoiceoverSession(
 function acceptedTake(state, id) {
   const take = state.takes.find((entry) => entry.id === id);
   if (!take) throw new Error(`Accepted voiceover take is missing: ${id}`);
+  if (!isVoiceoverTakeCurrent(state, take)) {
+    throw new Error(
+      `Accepted voiceover take uses stale narration and must be replaced: ${id}`,
+    );
+  }
   return take;
 }
 

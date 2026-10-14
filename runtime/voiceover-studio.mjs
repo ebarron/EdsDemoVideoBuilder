@@ -20,6 +20,10 @@ import {
   voiceoverBootstrapHtml,
   voiceoverStudioHtml,
 } from './voiceover-ui.mjs';
+import {
+  prepareVoiceoverNarrationEditor,
+  updateVoiceoverNarration,
+} from './narration-edit.mjs';
 
 const MAX_TAKE_BYTES = 500 * 1024 * 1024;
 const BOOTSTRAP_TTL_MS = 60_000;
@@ -149,6 +153,12 @@ function logStudioError(logger, request, error, secrets) {
 }
 
 function publicError(pathname, error) {
+  if (error?.publicMessage) {
+    return {
+      status: Number.isInteger(error.status) ? error.status : 400,
+      message: error.publicMessage,
+    };
+  }
   if (error instanceof SyntaxError) {
     return { status: 400, message: 'Invalid JSON request' };
   }
@@ -253,6 +263,12 @@ export async function createVoiceoverStudio(manifest, {
     releaseStudioLock = acquireStudioLock(prepared.directory);
   }
   const sessionDir = prepared.directory;
+  try {
+    prepared.state = prepareVoiceoverNarrationEditor(manifest, sessionDir);
+  } catch (error) {
+    releaseStudioLock();
+    throw error;
+  }
   const bootstrapToken = crypto.randomBytes(32).toString('hex');
   const sessionToken = crypto.randomBytes(32).toString('hex');
   const cookieName = `dvb_voiceover_${crypto.randomBytes(8).toString('hex')}`;
@@ -436,6 +452,20 @@ export async function createVoiceoverStudio(manifest, {
           200,
           deleteVoiceoverTake(manifest, body.takeId, sessionDir),
         );
+        return;
+      }
+      if (request.method === 'POST' && url.pathname === '/api/narration') {
+        const body = JSON.parse((await readBody(request, 1024 * 1024)).toString('utf8'));
+        const result = updateVoiceoverNarration(
+          manifest,
+          body,
+          sessionDir,
+        );
+        sendJson(response, 200, {
+          changed: result.changed,
+          state: result.state,
+          invalidated: result.invalidated,
+        });
         return;
       }
       if (request.method === 'POST' && url.pathname === '/api/complete') {

@@ -140,6 +140,14 @@ test('skill documents watchable and resilient driver defaults', () => {
     /Never add a\s+wildcard ambient-environment pass-through/,
     /authorization never appears in a query string, browser\s+history, server request URL, chat, or CLI output/,
     /authorization-redacted diagnostics remain in local server logs/,
+    /Scene recording is the normal workflow/,
+    /Record selected scene.+first[\s\S]+primary action/,
+    /exact Markdown script named by the\s+manifest/,
+    /If source spans do\s+not map uniquely, disable saving instead of guessing/,
+    /mark takes for the changed scene and all full\s+takes stale and ineligible/,
+    /Legacy\s+takes without a narration fingerprint inherit the session's opening narration\s+revision/,
+    /Put \*\*Edit\*\* directly on the existing current-narration teleprompter box/,
+    /never\s+add a second narration-editor panel/,
   ]) {
     assert.match(SKILL, pattern);
   }
@@ -240,6 +248,13 @@ test('skill documents watchable and resilient driver defaults', () => {
     /mode-0600 temporary launcher carries a one-use, short-lived\s+bootstrap value/,
     /Authorization values never appear in HTTP request URLs, the normal\s+browser history, or command output/,
     /Printed loopback URLs are informational and no longer authenticate/,
+    /Record selected scene.+first, primary action/s,
+    /\*\*Edit\*\* lives on the current narration box/,
+    /changes to the primary\s+\*\*Save\*\* action/,
+    /There is no second narration\s+panel/,
+    /Markdown script remains authoritative/,
+    /every continuous full take are marked \*\*stale wording\*\*/,
+    /legacy takes as matching the session's opening narration revision/,
   ]) {
     assert.match(VOICEOVER, pattern);
   }

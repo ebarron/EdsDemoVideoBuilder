@@ -7,6 +7,12 @@ import test from 'node:test';
 
 import ffmpegStatic from 'ffmpeg-static';
 
+import {
+  prepareVoiceoverNarrationEditor,
+  updateVoiceoverNarration,
+} from '../runtime/narration-edit.mjs';
+import { parseDemoScript } from '../runtime/parser.mjs';
+import { sourceHash } from '../runtime/sync.mjs';
 import { createVoiceoverStudio } from '../runtime/voiceover-studio.mjs';
 import {
   acceptLatestEligibleVoiceoverTakes,
@@ -23,6 +29,7 @@ import {
   verifyVoiceoverArtifacts,
   voiceoverPaths,
   voiceoverTimingFit,
+  writeVoiceoverSessionState,
 } from '../runtime/voiceover.mjs';
 
 function writeVideo(file, { color = 'blue', duration = 2 } = {}) {
@@ -111,6 +118,29 @@ function fixture({ validVideo = false } = {}) {
       tools: {},
     },
   };
+}
+
+function editableFixture() {
+  const files = fixture();
+  const markdown = [
+    '# Opening',
+    '',
+    'Repeat this. [Click Analytics.] Explain the [linked guide](https://example.com/guide).',
+    '',
+    '*[Open details.]*',
+    '',
+    'Final opening words.',
+    '',
+    '# Close',
+    '',
+    'Repeat this.',
+    '',
+  ].join('\r\n');
+  const plan = parseDemoScript(markdown, { source: 'script.md' });
+  plan.sourceHash = sourceHash(markdown);
+  fs.writeFileSync(files.manifest.script, markdown);
+  fs.writeFileSync(files.manifest.scenePlan, `${JSON.stringify(plan, null, 2)}\n`);
+  return { ...files, markdown, plan };
 }
 
 function waveBuffer(seconds = 1) {
@@ -502,6 +532,301 @@ test('records 48 kHz takes and finishes a separate human-voice video', () => {
   assert.equal(fs.existsSync(files.manifest.output.video), true);
 });
 
+test('edits only mapped narration, synchronizes state, and invalidates stale wording', () => {
+  const files = editableFixture();
+  const created = createVoiceoverSession(files.manifest);
+  const state = prepareVoiceoverNarrationEditor(files.manifest, created.directory);
+  const opening = state.authoring.scenes.opening;
+  assert.equal(opening.editable, true);
+  assert.equal(opening.cues.length, 3);
+  assert.equal(state.authoring.scenes.close.editable, true);
+  const promptBefore = state.prompts.find((prompt) => prompt.sceneId === 'opening');
+  const timingBefore = {
+    start: promptBefore.start,
+    end: promptBefore.end,
+    windowDuration: promptBefore.windowDuration,
+  };
+  const actionIds = files.plan.scenes[0].actions.map((action) => action.id);
+  const cueIds = files.plan.scenes[0].cues.map((cue) => cue.id);
+  const lockedScript = fs.readFileSync(
+    path.join(created.directory, 'picture-lock', 'script.md'),
+    'utf8',
+  );
+
+  const openingTake = registerVoiceoverTake({
+    manifest: files.manifest,
+    kind: 'scene',
+    sceneId: 'opening',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(0.5),
+  }).take;
+  const closeTake = registerVoiceoverTake({
+    manifest: files.manifest,
+    kind: 'scene',
+    sceneId: 'close',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(0.3),
+  }).take;
+  const fullTake = registerVoiceoverTake({
+    manifest: files.manifest,
+    kind: 'master',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(0.8),
+  }).take;
+  acceptVoiceoverTake(files.manifest, openingTake.id);
+  acceptVoiceoverTake(files.manifest, closeTake.id);
+  acceptVoiceoverTake(files.manifest, fullTake.id);
+
+  const request = {
+    sceneId: 'opening',
+    cues: opening.cues.map((cue, index) => ({
+      id: cue.id,
+      text: index === 0 ? 'Updated opening words.' : cue.text,
+    })),
+    expectedScriptHash: state.authoring.scriptHash,
+    expectedScenePlanHash: state.authoring.scenePlanHash,
+    expectedNarrationRevision: opening.narrationRevision,
+  };
+  assert.throws(
+    () => updateVoiceoverNarration(files.manifest, request, created.directory),
+    /Confirm that prior recordings/,
+  );
+  const updated = updateVoiceoverNarration(
+    files.manifest,
+    { ...request, confirmTakeInvalidation: true },
+    created.directory,
+  );
+  assert.equal(updated.changed, true);
+  assert.equal(updated.invalidated.sceneTakes, 1);
+  assert.equal(updated.invalidated.fullTakes, 1);
+  assert.equal(fs.existsSync(updated.backups.script), true);
+  assert.equal(fs.existsSync(updated.backups.scenePlan), true);
+  assert.equal(fs.readFileSync(updated.backups.script, 'utf8'), files.markdown);
+
+  const markdown = fs.readFileSync(files.manifest.script, 'utf8');
+  assert.match(markdown, /Updated opening words\. \[Click Analytics\.\]/);
+  assert.match(markdown, /\[linked guide]\(https:\/\/example\.com\/guide\)/);
+  assert.match(markdown, /\*\[Open details\.\]\*/);
+  assert.match(markdown, /# Close\r\n\r\nRepeat this\./);
+  assert.doesNotMatch(markdown, /(^|[^\r])\n/);
+  assert.equal(
+    fs.readFileSync(path.join(created.directory, 'picture-lock', 'script.md'), 'utf8'),
+    lockedScript,
+  );
+
+  const plan = JSON.parse(fs.readFileSync(files.manifest.scenePlan, 'utf8'));
+  assert.deepEqual(plan.scenes[0].actions.map((action) => action.id), actionIds);
+  assert.deepEqual(plan.scenes[0].cues.map((cue) => cue.id), cueIds);
+  assert.equal(plan.scenes[0].narration.startsWith('Updated opening words.'), true);
+  const prompt = updated.state.prompts.find((entry) => entry.sceneId === 'opening');
+  assert.match(prompt.text, /^Updated opening words\./);
+  assert.deepEqual(
+    {
+      start: prompt.start,
+      end: prompt.end,
+      windowDuration: prompt.windowDuration,
+    },
+    timingBefore,
+  );
+  assert.equal(updated.state.accepted.master, null);
+  assert.equal(updated.state.accepted.scenes.opening, undefined);
+  assert.equal(updated.state.accepted.scenes.close, closeTake.id);
+  assert.equal(updated.state.takes.find((take) => take.id === openingTake.id).stale, true);
+  assert.equal(updated.state.takes.find((take) => take.id === fullTake.id).stale, true);
+  assert.equal(updated.state.takes.find((take) => take.id === closeTake.id).stale, undefined);
+  assert.throws(
+    () => acceptVoiceoverTake(files.manifest, openingTake.id),
+    /stale narration/,
+  );
+  const latest = acceptLatestEligibleVoiceoverTakes(files.manifest);
+  assert.equal(latest.selected, 1);
+  assert.deepEqual(latest.accepted, []);
+
+  updated.state.accepted.master = fullTake.id;
+  writeVoiceoverSessionState({ directory: created.directory, state: updated.state });
+  assert.throws(
+    () => finishVoiceover(files.manifest, { stdio: 'pipe' }),
+    /stale narration/,
+  );
+  assert.throws(
+    () => verifyVoiceoverArtifacts(files.manifest),
+    /stale narration/,
+  );
+});
+
+test('rejects empty, unsafe, externally changed, and concurrent narration saves', () => {
+  const files = editableFixture();
+  const created = createVoiceoverSession(files.manifest);
+  const state = prepareVoiceoverNarrationEditor(files.manifest, created.directory);
+  const opening = state.authoring.scenes.opening;
+  const base = {
+    sceneId: 'opening',
+    expectedScriptHash: state.authoring.scriptHash,
+    expectedScenePlanHash: state.authoring.scenePlanHash,
+    expectedNarrationRevision: opening.narrationRevision,
+  };
+  assert.throws(
+    () => updateVoiceoverNarration(
+      files.manifest,
+      {
+        ...base,
+        cues: opening.cues.map((cue, index) => ({
+          id: cue.id,
+          text: index === 0 ? '   ' : cue.text,
+        })),
+      },
+      created.directory,
+    ),
+    /cannot be empty/,
+  );
+  assert.throws(
+    () => updateVoiceoverNarration(
+      files.manifest,
+      {
+        ...base,
+        cues: opening.cues.map((cue, index) => ({
+          id: cue.id,
+          text: index === 0 ? '[Click a different target.]' : cue.text,
+        })),
+      },
+      created.directory,
+    ),
+    /change scene structure or stage directions/,
+  );
+  assert.equal(fs.readFileSync(files.manifest.script, 'utf8'), files.markdown);
+
+  const first = updateVoiceoverNarration(
+    files.manifest,
+    {
+      ...base,
+      cues: opening.cues.map((cue, index) => ({
+        id: cue.id,
+        text: index === 0 ? 'First safe revision.' : cue.text,
+      })),
+    },
+    created.directory,
+  );
+  assert.equal(first.changed, true);
+  assert.throws(
+    () => updateVoiceoverNarration(
+      files.manifest,
+      {
+        ...base,
+        cues: opening.cues.map((cue, index) => ({
+          id: cue.id,
+          text: index === 0 ? 'Concurrent stale revision.' : cue.text,
+        })),
+      },
+      created.directory,
+    ),
+    /changed outside Voiceover Studio/,
+  );
+  assert.match(fs.readFileSync(files.manifest.script, 'utf8'), /First safe revision/);
+
+  const reopened = prepareVoiceoverNarrationEditor(files.manifest, created.directory);
+  fs.appendFileSync(files.manifest.script, '\r\n<!-- external edit -->\r\n');
+  const currentOpening = reopened.authoring.scenes.opening;
+  assert.throws(
+    () => updateVoiceoverNarration(
+      files.manifest,
+      {
+        sceneId: 'opening',
+        cues: currentOpening.cues.map((cue, index) => ({
+          id: cue.id,
+          text: index === 0 ? 'Would overwrite external work.' : cue.text,
+        })),
+        expectedScriptHash: reopened.authoring.scriptHash,
+        expectedScenePlanHash: reopened.authoring.scenePlanHash,
+        expectedNarrationRevision: currentOpening.narrationRevision,
+      },
+      created.directory,
+    ),
+    /changed outside Voiceover Studio/,
+  );
+  assert.match(fs.readFileSync(files.manifest.script, 'utf8'), /external edit/);
+});
+
+test('migrates legacy take revisions at Studio open and invalidates them on first edit', () => {
+  const files = editableFixture();
+  const created = createVoiceoverSession(files.manifest);
+  const legacyTake = registerVoiceoverTake({
+    manifest: files.manifest,
+    kind: 'scene',
+    sceneId: 'opening',
+    contentType: 'audio/wav',
+    bytes: waveBuffer(0.4),
+  }).take;
+  const legacy = readVoiceoverSession(files.manifest, created.directory);
+  delete legacy.state.narration;
+  delete legacy.state.authoring;
+  delete legacy.state.takes[0].narrationRevision;
+  legacy.state.version = 2;
+  writeVoiceoverSessionState(legacy);
+
+  const migrated = prepareVoiceoverNarrationEditor(files.manifest, created.directory);
+  assert.match(migrated.takes[0].narrationRevision, /^sha256:/);
+  assert.match(migrated.narration.openingRevision, /^sha256:/);
+  assert.equal(migrated.takes[0].stale, undefined);
+  assert.ok(migrated.narration.legacyTakesMigratedAt);
+
+  const opening = migrated.authoring.scenes.opening;
+  const result = updateVoiceoverNarration(
+    files.manifest,
+    {
+      sceneId: 'opening',
+      cues: opening.cues.map((cue, index) => ({
+        id: cue.id,
+        text: index === 0 ? 'Legacy migration revision.' : cue.text,
+      })),
+      expectedScriptHash: migrated.authoring.scriptHash,
+      expectedScenePlanHash: migrated.authoring.scenePlanHash,
+      expectedNarrationRevision: opening.narrationRevision,
+      confirmTakeInvalidation: true,
+    },
+    created.directory,
+  );
+  assert.equal(
+    result.state.takes.find((take) => take.id === legacyTake.id).stale,
+    true,
+  );
+});
+
+test('uses the latest Studio narration snapshot for a later guarded picture rebase', () => {
+  const files = editableFixture();
+  const previous = createVoiceoverSession(files.manifest);
+  const state = prepareVoiceoverNarrationEditor(files.manifest, previous.directory);
+  const opening = state.authoring.scenes.opening;
+  updateVoiceoverNarration(
+    files.manifest,
+    {
+      sceneId: 'opening',
+      cues: opening.cues.map((cue, index) => ({
+        id: cue.id,
+        text: index === 0 ? 'Authoritative Studio revision.' : cue.text,
+      })),
+      expectedScriptHash: state.authoring.scriptHash,
+      expectedScenePlanHash: state.authoring.scenePlanHash,
+      expectedNarrationRevision: opening.narrationRevision,
+    },
+    previous.directory,
+  );
+  fs.appendFileSync(files.manifest.output.video, '-revised-picture');
+  fs.writeFileSync(files.manifest.output.contactSheet, 'revised contact sheet');
+
+  const rebased = rebaseVoiceoverSession(files.manifest);
+  assert.equal(rebased.rebased, true);
+  assert.notEqual(rebased.directory, previous.directory);
+  assert.match(rebased.state.prompts[0].text, /^Authoritative Studio revision\./);
+  assert.equal(
+    fs.readFileSync(path.join(rebased.directory, 'picture-lock', 'script.md'), 'utf8'),
+    fs.readFileSync(files.manifest.script, 'utf8'),
+  );
+  assert.equal(
+    fs.readFileSync(path.join(previous.directory, 'picture-lock', 'script.md'), 'utf8'),
+    files.markdown,
+  );
+});
+
 test('bootstraps a private Studio session without auth in URLs or responses', async () => {
   const files = fixture();
   const logs = [];
@@ -567,6 +892,19 @@ test('bootstraps a private Studio session without auth in URLs or responses', as
     await crossOriginMutation.text(),
     'Voiceover studio authorization required',
   );
+  const crossOriginNarration = await request('/api/narration', {
+    method: 'POST',
+    headers: {
+      origin: 'http://127.0.0.1:1',
+      'content-type': 'application/json',
+    },
+    body: '{}',
+  });
+  assert.equal(crossOriginNarration.status, 403);
+  assert.equal(
+    await crossOriginNarration.text(),
+    'Voiceover studio authorization required',
+  );
   const page = await request('/');
   assert.equal(page.status, 200);
   const html = await page.text();
@@ -577,6 +915,26 @@ test('bootstraps a private Studio session without auth in URLs or responses', as
   assert.match(html, /Use anyway/);
   assert.match(html, /data-delete-take/);
   assert.match(html, /Delete other takes after selection/);
+  assert.match(
+    html,
+    /<div class="prompt">[\s\S]*?<button id="edit-narration" class="secondary" type="button">Edit<\/button>/,
+  );
+  assert.match(html, /id="narration-editor-form" hidden/);
+  assert.match(html, /id="narration-cue-editors" class="prompt-cue-editors"/);
+  assert.match(html, /aria-live="polite"/);
+  assert.match(html, /narrationEditing \? 'Save narration' : 'Edit narration'/);
+  assert.match(html, /event\.key !== 'Escape'/);
+  assert.doesNotMatch(html, /Selected scene narration/);
+  assert.doesNotMatch(html, /id="save-narration"/);
+  assert.doesNotMatch(html, /class="narration-editor"/);
+  assert.ok(
+    html.indexOf('<button id="record-scene">Record selected scene</button>') <
+      html.indexOf('<button id="record-master" class="secondary">Record full take</button>'),
+  );
+  assert.doesNotMatch(
+    html,
+    /id="record-scene" class="secondary"/,
+  );
   assert.match(html, /Voiceover session saved/);
   assert.match(html, /Finish and verify the saved human-voiceover video/);
   assert.match(html, /Copy handoff prompt/);
@@ -591,6 +949,23 @@ test('bootstraps a private Studio session without auth in URLs or responses', as
   const session = await request('/api/session');
   assert.equal(session.status, 200);
   const firstState = await session.json();
+  const invalidNarration = await request('/api/narration', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      sceneId: 'opening',
+      cues: firstState.authoring.scenes.opening.cues.map((cue) => ({
+        id: cue.id,
+        text: ' ',
+      })),
+      expectedScriptHash: firstState.authoring.scriptHash,
+      expectedScenePlanHash: firstState.authoring.scenePlanHash,
+      expectedNarrationRevision:
+        firstState.authoring.scenes.opening.narrationRevision,
+    }),
+  });
+  assert.equal(invalidNarration.status, 400);
+  assert.equal(await invalidNarration.text(), 'Spoken narration cannot be empty.');
   const take = registerVoiceoverTake({
     manifest: files.manifest,
     kind: 'scene',

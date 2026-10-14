@@ -71,9 +71,17 @@ It preserves the old session while creating a fresh one for changed narration.
 
 The video is always muted; the synthetic voice is not played.
 
-- **Record full take** starts at the beginning and scrolls the teleprompter as
-  the locked video plays.
-- **Record selected scene** seeks to one scene for a punch-in retake.
+- **Record selected scene** is the first, primary action and seeks to one scene
+  for the normal scene-by-scene workflow. Studio selects the first narrated
+  scene when needed.
+- **Record full take** is a secondary option that starts at the beginning and
+  scrolls the teleprompter as the locked video plays.
+- **Edit** lives on the current narration box and changes to the primary
+  **Save** action while that same box edits its visible spoken cues. A compact
+  **Cancel** action and Escape leave edit mode. There is no second narration
+  panel, and the Next preview is never included. Save explicitly writes final
+  wording back to the Markdown script identified by the manifest; typing alone
+  never saves.
 - Recording controls, microphone selection, level meter, and status remain
   pinned while the scene and take lists scroll.
 - A selected-scene recording pins that scene's prompt through the initial seek
@@ -112,6 +120,32 @@ The video is always muted; the synthetic voice is not played.
   the studio lists those uncovered segments and asks before closing. Saving
   anyway produces a reopen-studio handoff instead of claiming the video is
   ready to finish.
+
+## Final narration tweaks
+
+The Markdown script remains authoritative. Studio maps each spoken cue through
+the same parser used by scene-plan synchronization, edits exact source spans,
+creates a unique script and plan backup, and atomically replaces both files.
+Headings, comments, standalone and inline actions, links, unrelated scenes,
+newline style, stable IDs, and driver choreography remain unchanged. The open
+teleprompter and session snapshots update immediately; picture-lock video,
+timing, and prior immutable artifacts do not.
+
+Studio refuses empty narration and any scene that cannot be mapped uniquely.
+It also rejects stale saves if another tab saved first or if the backing script
+or generated plan changed after Studio opened. Reopen or resynchronize rather
+than overwriting external edits. Unsaved editor text prompts before a scene
+change and triggers the browser's leave-page protection.
+
+Before saving changed wording, Studio identifies affected recordings and asks
+for confirmation. Audio remains playable in history, but scene takes for the
+edited scene and every continuous full take are marked **stale wording** and
+become ineligible. Their accepted selections are cleared. Bulk selection skips
+them, and finishing or verification rejects a stale selection. Takes for other
+scenes remain eligible. Sessions created before narration fingerprints existed
+treat legacy takes as matching the session's opening narration revision when
+Studio first opens; the first Studio edit stamps that baseline and invalidates
+affected takes normally.
 
 Finishing preserves the session. To revise the result, ask the skill to reopen
 the existing studio while preserving takes and selections. After saving, the

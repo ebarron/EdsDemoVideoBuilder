@@ -346,6 +346,29 @@ No synthetic audio plays. It supports a
 continuous full take and scene-level punch-in retakes, normalizes microphone
 recordings to 48 kHz mono WAV, retains take history, and provides Play/Stop
 controls directly on recorded scene rows for auditioning the latest take.
+Scene recording is the primary, first action; recording the full video remains
+available as a secondary option. The first narrated scene is selected
+automatically when needed.
+
+For final wording tweaks, choose **Edit** directly on the current narration
+box. The visible words become an in-place editor in that same box and **Edit**
+becomes the primary **Save** action; a compact Cancel action and Escape provide
+a safe exit. The editor exposes only the safely mapped spoken cues—never the
+Next preview—and does not add a second narration panel. Save writes to the
+manifest's authoritative Markdown script, creates a unique backup, atomically
+resynchronizes the generated scene plan, and updates the teleprompter without
+changing locked video timing or browser choreography. It refuses ambiguous
+source mappings, empty wording, stale editors, and external script changes
+instead of guessing or overwriting work. Unsaved text is protected when
+switching scenes or leaving the page.
+
+Saving changed wording warns before invalidating recordings. Prior audio stays
+in history, but takes for that scene and every full take become visibly stale
+and cannot be selected, bulk-used, finished, or verified; affected selections
+are cleared. Other scene takes remain usable. Older sessions assign legacy
+takes the session's opening narration revision when Studio first opens, then
+use normal wording fingerprints after the first edit.
+
 Each scene folds its prior takes into a collapsed local history, while full
 takes stay grouped by the master area. An explicit Use latest eligible takes
 action bulk-selects the newest fitting scene takes. An unchecked-by-default
@@ -372,8 +395,10 @@ Starting the studio creates an immutable picture-lock package, including the
 approved video, timeline, script, scene plan, contact sheet, and raw take when
 available. Human output uses `-human` filenames and never overwrites the
 synthetic version. A changed script or spoken scene structure requires fresh
-voice recording; a visual-only change uses the guarded reuse workflow
-automatically.
+voice recording when it was changed outside Studio; Studio wording edits
+invalidate only incompatible audio while retaining immutable picture-lock
+artifacts. A visual-only change uses the guarded reuse workflow automatically,
+including the Studio's latest authoritative narration snapshot.
 
 See [Narration modes](references/narration.md) and
 [Human voiceover](references/human-voiceover.md) for details.

@@ -370,6 +370,33 @@ or scene-level take. It normalizes accepted recordings to 48 kHz mono WAV.
 Keep the recording controls, microphone, meter, and status pinned while its
 lists scroll. When recording a selected scene, pin that scene's teleprompter
 text across the initial media seek so the prior prompt never flashes first.
+Scene recording is the normal workflow: put **Record selected scene** first
+and style it as the primary action. Select the first narrated scene when none
+is selected. Keep **Record full take** available as a secondary action, never
+as the visual fallback.
+
+Put **Edit** directly on the existing current-narration teleprompter box. Edit
+the safely mapped spoken cues in place inside that same box, change the control
+to the primary **Save** action, and keep cancellation compact in the box; never
+add a second narration-editor panel. Save only on an explicit user action and
+write through the canonical parser to the exact Markdown script named by the
+manifest. Preserve
+headings, comments, actions, links, unrelated scenes, and newline style; create
+a unique backup and atomically replace the script and generated scene plan.
+Retain scene, cue, and action IDs and driver choreography. If source spans do
+not map uniquely, disable saving instead of guessing. Reject empty narration,
+stale editor revisions, and external script or plan drift. A successful save
+updates the scene plan, teleprompter, session hashes, and narration snapshots
+immediately while leaving picture-lock media and timing unchanged.
+
+Before changing wording, warn if scene or full-take recordings are affected.
+Keep prior audio as history, mark takes for the changed scene and all full
+takes stale and ineligible, and clear their selections. Bulk selection,
+finishing, and verification must skip or reject stale-wording takes. Legacy
+takes without a narration fingerprint inherit the session's opening narration
+revision when Studio first opens; after the first edit, normal fingerprint
+checks apply.
+
 Recording must not replace an accepted selection. Show Play and Stop directly
 on every recorded scene row for its latest take and beside every take in
 that scene's collapsed history, then require an explicit Use action to accept
@@ -416,8 +443,11 @@ After finishing and verification succeed, the response must include:
 The session preserves an immutable picture-lock package and the synthetic
 outputs. Human artifacts use separate `-human` names. If only the picture
 changed, use the guarded `voiceover --rebase` flow above. If the script or
-spoken scene structure changed, use `voiceover --new-session` and rerecord the
-affected narration; never bypass rebase compatibility checks.
+spoken scene structure changed outside Studio, use `voiceover --new-session`
+and rerecord the affected narration; never bypass rebase compatibility checks.
+Safe final wording edits made inside Studio update the authoritative script
+snapshot for later guarded operations while preserving the original immutable
+picture-lock artifacts.
 Finishing preserves the existing session. For prompt-driven revisions,
 internally reopen it without creating a new session, regenerate with overwrite
 enabled, and rerun verification.

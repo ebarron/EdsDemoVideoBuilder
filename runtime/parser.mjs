@@ -27,23 +27,61 @@ function parseMachineComment(line, lineNumber) {
   }
 }
 
-function stripNarrationPrefix(line) {
-  return line.replace(/^\s*>\s?/, '').trim();
-}
-
 function stripDirection(line) {
   const bracketed = line.match(STAGE_DIRECTION);
   if (bracketed) return bracketed[1].trim();
   return line.trim().replace(/^([*_])/, '').replace(/([*_])$/, '').trim();
 }
 
+function sourceLines(markdown) {
+  const lines = [];
+  let offset = 0;
+  let lineNumber = 1;
+  while (offset <= markdown.length) {
+    let end = offset;
+    while (end < markdown.length && markdown[end] !== '\n' && markdown[end] !== '\r') {
+      end += 1;
+    }
+    let newline = '';
+    if (end < markdown.length) {
+      newline = markdown[end] === '\r' && markdown[end + 1] === '\n'
+        ? '\r\n'
+        : markdown[end];
+    }
+    lines.push({
+      text: markdown.slice(offset, end),
+      lineNumber,
+      startOffset: offset,
+      endOffset: end,
+      newline,
+    });
+    if (!newline) break;
+    offset = end + newline.length;
+    lineNumber += 1;
+  }
+  return lines;
+}
+
+function spokenLine(entry) {
+  const prefix = entry.text.match(/^\s*>\s?/)?.[0] ?? '';
+  const afterPrefix = entry.text.slice(prefix.length);
+  const leading = afterPrefix.match(/^\s*/)?.[0].length ?? 0;
+  const trailing = afterPrefix.match(/\s*$/)?.[0].length ?? 0;
+  const end = Math.max(leading, afterPrefix.length - trailing);
+  return {
+    text: afterPrefix.slice(leading, end),
+    startOffset: entry.startOffset + prefix.length + leading,
+  };
+}
+
 export function parseDemoScript(markdown, options = {}) {
   const source = options.source ?? 'script.md';
   const includeHeadings = options.includeHeadings?.map((heading) => heading.toLowerCase());
-  const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
-  const preferredRoot = lines
-    .map((line, index) => {
-      const heading = line.match(HEADING);
+  const records = sourceLines(markdown);
+  const lines = records.map((entry) => entry.text);
+  const preferredRoot = records
+    .map((entry, index) => {
+      const heading = entry.text.match(HEADING);
       if (!heading) return null;
       const title = heading[2].replace(/\s+#*$/, '').trim();
       return PREFERRED_SCRIPT_ROOT.test(title)
@@ -111,7 +149,14 @@ export function parseDemoScript(markdown, options = {}) {
     return current;
   };
 
-  const addNarrationCue = (scene, text, startLine, endLine, separator = '\n\n') => {
+  const addNarrationCue = (
+    scene,
+    text,
+    startLine,
+    endLine,
+    separator = '\n\n',
+    sourceSpan = null,
+  ) => {
     const narration = text.trim();
     if (!narration) return;
     const number = scene.cues.filter((cue) => cue.kind === 'narration').length + 1;
@@ -119,7 +164,16 @@ export function parseDemoScript(markdown, options = {}) {
       id: `${scene.id}-narration-${number}`,
       kind: 'narration',
       text: narration,
-      source: { startLine, endLine },
+      source: {
+        startLine,
+        endLine,
+        ...(sourceSpan
+          ? {
+            startOffset: sourceSpan.startOffset,
+            endOffset: sourceSpan.endOffset,
+          }
+          : {}),
+      },
     });
     scene.narration = scene.narration
       ? `${scene.narration}${separator}${narration}`
@@ -150,13 +204,21 @@ export function parseDemoScript(markdown, options = {}) {
     }
     const scene = ensureScene(undefined, paragraph[0].lineNumber);
     let narrationParts = [];
+    let narrationFragments = [];
     let narrationStart = null;
     let narrationEnd = null;
     let narrationCuesInParagraph = 0;
-    const appendNarration = (text, lineNumber) => {
-      const normalized = text.trim();
+    const appendNarration = (text, lineNumber, startOffset) => {
+      const leading = text.match(/^\s*/)?.[0].length ?? 0;
+      const trailing = text.match(/\s*$/)?.[0].length ?? 0;
+      const end = Math.max(leading, text.length - trailing);
+      const normalized = text.slice(leading, end);
       if (!normalized) return;
       narrationParts.push(normalized);
+      narrationFragments.push({
+        startOffset: startOffset + leading,
+        endOffset: startOffset + end,
+      });
       narrationStart ??= lineNumber;
       narrationEnd = lineNumber;
     };
@@ -168,23 +230,37 @@ export function parseDemoScript(markdown, options = {}) {
           narrationStart,
           narrationEnd,
           narrationCuesInParagraph === 0 ? '\n\n' : ' ',
+          {
+            startOffset: narrationFragments[0].startOffset,
+            endOffset: narrationFragments.at(-1).endOffset,
+          },
         );
         narrationCuesInParagraph += 1;
       }
       narrationParts = [];
+      narrationFragments = [];
       narrationStart = null;
       narrationEnd = null;
     };
     for (const entry of paragraph) {
-      const text = stripNarrationPrefix(entry.text);
+      const spoken = spokenLine(entry);
+      const text = spoken.text;
       let cursor = 0;
       for (const match of text.matchAll(INLINE_STAGE_DIRECTION)) {
-        appendNarration(text.slice(cursor, match.index), entry.lineNumber);
+        appendNarration(
+          text.slice(cursor, match.index),
+          entry.lineNumber,
+          spoken.startOffset + cursor,
+        );
         flushNarration();
         addActionCue(scene, { direction: stripDirection(match[0]) }, entry.lineNumber);
         cursor = match.index + match[0].length;
       }
-      appendNarration(text.slice(cursor), entry.lineNumber);
+      appendNarration(
+        text.slice(cursor),
+        entry.lineNumber,
+        spoken.startOffset + cursor,
+      );
     }
     flushNarration();
     scene.source.endLine = Math.max(scene.source.endLine, endLine);
@@ -194,6 +270,7 @@ export function parseDemoScript(markdown, options = {}) {
   for (let index = 0; index < lines.length; index += 1) {
     const lineNumber = index + 1;
     const line = lines[index];
+    const record = records[index];
     if (/^\s*```/.test(line)) {
       flushParagraph(lineNumber - 1);
       inFence = !inFence;
@@ -280,7 +357,7 @@ export function parseDemoScript(markdown, options = {}) {
       flushParagraph(lineNumber - 1);
       continue;
     }
-    paragraph.push({ text: line, lineNumber });
+    paragraph.push({ ...record, lineNumber });
   }
   flushParagraph(lines.length);
 

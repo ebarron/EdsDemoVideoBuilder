@@ -42,9 +42,18 @@ export {
   finishVoiceover,
   readVoiceoverSession,
   rebaseVoiceoverSession,
+  isVoiceoverTakeCurrent,
+  stampLegacyTakeNarrationRevisions,
+  voiceoverNarrationRevision,
   voiceoverPaths,
+  voiceoverSceneNarrationRevision,
   voiceoverTimingFit,
   voiceoverVerificationManifest,
   verifyVoiceoverArtifacts,
 } from './voiceover.mjs';
+export {
+  mapNarrationSourceSpans,
+  prepareVoiceoverNarrationEditor,
+  updateVoiceoverNarration,
+} from './narration-edit.mjs';
 export { createVoiceoverStudio } from './voiceover-studio.mjs';
