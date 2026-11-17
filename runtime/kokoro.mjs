@@ -604,7 +604,6 @@ export function ensureKokoroModel(settings, { curl = 'curl' } = {}) {
     const urls = [
       `https://huggingface.co/${KOKORO_MODEL}/resolve/${KOKORO_MODEL_REVISION}/${expected.file}`,
       `https://www.modelscope.cn/models/${KOKORO_MODEL}/resolve/${KOKORO_MODEL_REVISION}/${expected.file}`,
-      `https://www.modelscope.cn/models/${KOKORO_MODEL}/resolve/master/${expected.file}`,
     ];
     let result = null;
     let verified = false;
