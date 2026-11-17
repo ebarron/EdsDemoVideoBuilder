@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { parseDemoScript } from '../runtime/parser.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+const README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8').replace(/\r\n/g, '\n');
 
 test('README first-demo script interleaves narration and directions', () => {
   const example = README.match(

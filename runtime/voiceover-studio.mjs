@@ -25,6 +25,21 @@ import {
   updateVoiceoverNarration,
 } from './narration-edit.mjs';
 
+export function studioLaunchSpec(launcher, platform = process.platform) {
+  if (platform === 'darwin') {
+    return { command: '/usr/bin/open', args: [launcher] };
+  }
+  if (platform === 'win32') {
+    const quoted = launcher.replace(/"/g, '""');
+    return {
+      command: 'cmd.exe',
+      args: ['/d', '/s', '/c', `start "" "${quoted}"`],
+      windowsVerbatimArguments: true,
+    };
+  }
+  return null;
+}
+
 const MAX_TAKE_BYTES = 500 * 1024 * 1024;
 const BOOTSTRAP_TTL_MS = 60_000;
 const SESSION_TTL_MS = 8 * 60 * 60_000;
@@ -529,7 +544,8 @@ export async function createVoiceoverStudio(manifest, {
   bootstrapTimer = setTimeout(expireBootstrap, bootstrapTtlMs);
   bootstrapTimer.unref();
   if (open) {
-    if (process.platform !== 'darwin') {
+    const launch = studioLaunchSpec(launcher);
+    if (!launch) {
       closeStudio({
         session: prepared.state.id,
         directory: prepared.directory,
@@ -537,11 +553,15 @@ export async function createVoiceoverStudio(manifest, {
         reason: 'unsupported-platform',
       });
       await done;
-      throw new Error('Automatic voiceover studio opening currently requires macOS');
+      throw new Error(
+        `Automatic voiceover studio opening is not available on ${process.platform}`,
+      );
     }
-    const opener = spawn('/usr/bin/open', [launcher], {
+    const opener = spawn(launch.command, launch.args, {
       detached: true,
       stdio: 'ignore',
+      windowsHide: true,
+      windowsVerbatimArguments: launch.windowsVerbatimArguments === true,
     });
     opener.unref();
   }

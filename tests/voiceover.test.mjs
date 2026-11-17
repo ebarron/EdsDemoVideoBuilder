@@ -837,7 +837,9 @@ test('bootstraps a private Studio session without auth in URLs or responses', as
   const publicUrl = new URL(studio.url);
   assert.equal(publicUrl.search, '');
   assert.equal(publicUrl.hash, '');
-  assert.equal(fs.statSync(studio.launcher).mode & 0o077, 0);
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(studio.launcher).mode & 0o077, 0);
+  }
 
   const bootstrapPage = await fetch(studio.url);
   assert.equal(bootstrapPage.status, 200);

@@ -1,7 +1,7 @@
 # Demo Video Builder
 
-`demo-video-builder` is a macOS-first Cursor skill for making a narrated
-recording of a real browser app.
+`demo-video-builder` is a Cursor skill for making a narrated
+recording of a real browser app on macOS and Windows.
 
 You can paste the demo script directly into your Cursor prompt. The skill
 stores it as managed Markdown that you can edit for later revisions.
@@ -14,6 +14,14 @@ with npm.
 ```bash
 gh repo clone ebarron/EdsDemoVideoBuilder "$HOME/.cursor/skills/demo-video-builder"
 "$HOME/.cursor/skills/demo-video-builder/scripts/install.sh"
+```
+
+On Windows, Git and Node.js 20+ replace the GitHub CLI requirement. Windows 10
+and later include `curl.exe`.
+
+```powershell
+git clone https://github.com/ebarron/EdsDemoVideoBuilder.git "$env:USERPROFILE\.cursor\skills\demo-video-builder"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.cursor\skills\demo-video-builder\scripts\install.ps1"
 ```
 
 The installer also prepares Chromium, the locked Kokoro runtime, and its
@@ -159,6 +167,11 @@ Or:
 ```bash
 git -C "$HOME/.cursor/skills/demo-video-builder" pull --ff-only
 "$HOME/.cursor/skills/demo-video-builder/scripts/install.sh"
+```
+
+```powershell
+git -C "$env:USERPROFILE\.cursor\skills\demo-video-builder" pull --ff-only
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.cursor\skills\demo-video-builder\scripts\install.ps1"
 ```
 
 ## Defaults and discovery

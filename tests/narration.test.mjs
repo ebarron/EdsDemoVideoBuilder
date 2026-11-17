@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import ffmpegStatic from 'ffmpeg-static';
 import {
   ensureKokoroModel,
   generateKokoroChunks,
@@ -136,7 +137,7 @@ test('Kokoro production caches measured WAV clips by synthesis settings', async 
     scenePlan: scenePlan(),
     workDir: path.join(root, 'take-one'),
     rehearsal: false,
-    ffmpeg: 'ffmpeg',
+    ffmpeg: ffmpegStatic,
     kokoroProvider: provider,
   });
   const second = await prepareNarration({
@@ -144,7 +145,7 @@ test('Kokoro production caches measured WAV clips by synthesis settings', async 
     scenePlan: scenePlan(),
     workDir: path.join(root, 'take-two'),
     rehearsal: false,
-    ffmpeg: 'ffmpeg',
+    ffmpeg: ffmpegStatic,
     kokoroProvider: provider,
   });
 

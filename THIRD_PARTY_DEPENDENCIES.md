@@ -48,6 +48,11 @@ The root `package.json` declares these direct dependencies:
 - **js-yaml** — declared as `^4.1.0`, currently resolved as `4.3.2`;
   [MIT](https://spdx.org/licenses/MIT.html);
   [source](https://github.com/nodeca/js-yaml).
+- **koffi** — declared as `^3.3.8`, currently resolved as `3.3.8`;
+  [MIT](https://spdx.org/licenses/MIT.html);
+  [source](https://github.com/Koromix/koffi). On Windows it loads the
+  Kokoro runtime's own ONNX Runtime DLLs before Node binds the native module,
+  so a copy shipped with Windows does not take precedence.
 
 The isolated synthetic-speech runtime declares:
 
