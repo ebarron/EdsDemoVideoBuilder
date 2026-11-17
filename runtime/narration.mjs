@@ -23,7 +23,7 @@ function afinfoDuration(file) {
 
 function ffmpegDuration(file, ffmpeg) {
   const result = spawnSync(ffmpeg, ['-hide_banner', '-i', file], { encoding: 'utf8' });
-  const match = result.stderr.match(/Duration:\s+(\d+):(\d+):([\d.]+)/);
+  const match = result.stderr?.match(/Duration:\s+(\d+):(\d+):([\d.]+)/);
   return match ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) : 0;
 }
 

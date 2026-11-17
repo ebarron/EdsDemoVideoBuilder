@@ -29,11 +29,22 @@ export function appUrlCheckOptions(manifest) {
   };
 }
 
+export function supportedRecordingPlatform(platform = process.platform) {
+  return platform === 'darwin' || platform === 'win32';
+}
+
 export async function preflightDemo(manifest, environment = process.env) {
   const checks = [];
   let productionReady = false;
   const check = (name, ok, detail, extra = {}) => checks.push({ name, ok, detail, ...extra });
-  check('platform', process.platform === 'darwin', `${process.platform} (v1 is macOS-first)`);
+  const platformSupported = supportedRecordingPlatform();
+  check(
+    'platform',
+    platformSupported,
+    platformSupported
+      ? `${process.platform} (macOS and Windows)`
+      : `${process.platform} (supported platforms are macOS and Windows)`,
+  );
   check('node', Number(process.versions.node.split('.')[0]) >= 20, process.version);
 
   for (const [name, file] of [

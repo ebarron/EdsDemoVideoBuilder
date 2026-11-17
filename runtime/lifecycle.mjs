@@ -1,8 +1,9 @@
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
+
+import { spawnCommand } from './command.mjs';
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
@@ -128,7 +129,7 @@ export async function startLifecycle(manifest, workDir, environment = process.en
   const logPath = path.join(workDir, 'app-lifecycle.log');
   const log = fs.openSync(logPath, 'a', 0o600);
   const [command, ...args] = lifecycle.start;
-  const child = spawn(command, args, {
+  const child = spawnCommand(command, args, {
     cwd: manifest.app.cwd,
     env: lifecycleEnvironment(lifecycle, environment),
     detached: false,

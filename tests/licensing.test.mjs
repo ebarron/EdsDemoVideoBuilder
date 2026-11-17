@@ -16,7 +16,7 @@ const read = (relative) => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 const readJson = (relative) => JSON.parse(read(relative));
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const README = read('README.md');
+const README = read('README.md').replace(/\r\n/g, '\n');
 const DISCLOSURE = read('THIRD_PARTY_DEPENDENCIES.md');
 const ROOT_PACKAGE = readJson('package.json');
 const ROOT_LOCK = readJson('package-lock.json');
@@ -24,7 +24,9 @@ const KOKORO_PACKAGE = readJson('resources/kokoro-runtime/package.json');
 const KOKORO_LOCK = readJson('resources/kokoro-runtime/package-lock.json');
 
 test('LICENSE is the canonical Apache License 2.0 text', () => {
-  const digest = crypto.createHash('sha256').update(read('LICENSE')).digest('hex');
+  const digest = crypto.createHash('sha256')
+    .update(read('LICENSE').replace(/\r\n/g, '\n'))
+    .digest('hex');
   assert.equal(digest, 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4');
 });
 

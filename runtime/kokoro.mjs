@@ -1,10 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { spawnCommandSync } from './command.mjs';
+import { prepareWindowsOnnxRuntime } from './win32-ort.mjs';
 
 export const KOKORO_PACKAGE = 'kokoro-js';
 export const KOKORO_PACKAGE_VERSION = '1.2.1';
@@ -96,7 +99,12 @@ export const KOKORO_VOICES = [
 ];
 
 export function defaultKokoroCacheDir() {
-  return path.join(os.homedir(), 'Library', 'Caches', 'demo-video-builder', 'kokoro');
+  const root = process.platform === 'win32'
+    ? (process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'))
+    : process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Caches')
+      : (process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'));
+  return path.join(root, 'demo-video-builder', 'kokoro');
 }
 
 export function defaultKokoroRuntimeDir() {
@@ -184,11 +192,12 @@ export function kokoroRuntimeStatus(root = defaultKokoroRuntimeDir()) {
     const ttsOnlySharpStub =
       sharpMetadata.version === '0.34.5' &&
       sharpMetadata.demoVideoBuilderTtsStub === true;
-    const tree = spawnSync('npm', ['ls', '--prefix', root, '--all', '--json'], {
+    const tree = spawnCommandSync('npm', ['ls', '--prefix', root, '--all', '--json'], {
       encoding: 'utf8',
       timeout: 30_000,
     });
     const treeHealthy = tree.status === 0;
+    prepareWindowsOnnxRuntime(runtimeRequire);
     runtimeRequire(KOKORO_PACKAGE);
     return {
       installed:
@@ -272,7 +281,7 @@ export function setupKokoroRuntime({
     );
     fs.chmodSync(path.join(root, name), 0o600);
   }
-  const install = spawnSync(npm, [
+  const install = spawnCommandSync(npm, [
     'ci',
     '--prefix', root,
     '--no-audit',
@@ -592,27 +601,39 @@ export function ensureKokoroModel(settings, { curl = 'curl' } = {}) {
     const destination = path.join(root, expected.file);
     fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
     const temporary = `${destination}.tmp-${process.pid}-${Date.now()}`;
-    const url =
-      `https://huggingface.co/${KOKORO_MODEL}/resolve/` +
-      `${KOKORO_MODEL_REVISION}/${expected.file}`;
-    const result = spawnSync(curl, [
-      '--fail',
-      '--location',
-      '--retry', '3',
-      '--show-error',
-      '--silent',
-      '--output', temporary,
-      url,
-    ], { encoding: 'utf8', timeout: 10 * 60_000 });
-    if (result.error?.code === 'ETIMEDOUT') {
+    const urls = [
+      `https://huggingface.co/${KOKORO_MODEL}/resolve/${KOKORO_MODEL_REVISION}/${expected.file}`,
+      `https://www.modelscope.cn/models/${KOKORO_MODEL}/resolve/${KOKORO_MODEL_REVISION}/${expected.file}`,
+      `https://www.modelscope.cn/models/${KOKORO_MODEL}/resolve/master/${expected.file}`,
+    ];
+    let result = null;
+    let verified = false;
+    const errors = [];
+    for (const url of urls) {
+      result = spawnCommandSync(curl, [
+        '--fail',
+        '--location',
+        '--retry', '3',
+        '--show-error',
+        '--silent',
+        '--output', temporary,
+        url,
+      ], { encoding: 'utf8', timeout: 10 * 60_000 });
+      if (result.error?.code === 'ETIMEDOUT') {
+        fs.rmSync(temporary, { force: true });
+        throw new Error(`Kokoro model download timed out: ${expected.file}`);
+      }
+      if (result.status === 0 && validModelFile(temporary, expected)) {
+        verified = true;
+        break;
+      }
+      errors.push(result.stderr?.trim() || `download failed for ${url}`);
       fs.rmSync(temporary, { force: true });
-      throw new Error(`Kokoro model download timed out: ${expected.file}`);
     }
-    if (result.status !== 0 || !validModelFile(temporary, expected)) {
-      fs.rmSync(temporary, { force: true });
+    if (!verified) {
       throw new Error(
         `Kokoro model download failed integrity validation for ${expected.file}` +
-        (result.stderr ? `:\n${result.stderr}` : ''),
+        (errors.length ? `:\n${errors.join('\n')}` : ''),
       );
     }
     fs.renameSync(temporary, destination);

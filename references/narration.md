@@ -58,8 +58,8 @@ The pinned provider is `kokoro-js@1.2.1` with
 `onnx-community/Kokoro-82M-v1.0-ONNX` at an immutable repository revision.
 Rehearsal uses duration estimates and does not load or download the model.
 Install/update—or production self-repair if assets are missing—places model
-assets in
-`~/Library/Caches/demo-video-builder/kokoro`; subsequent audio is cached by
+assets in `~/Library/Caches/demo-video-builder/kokoro` on macOS and
+`%LOCALAPPDATA%\demo-video-builder\kokoro` on Windows; subsequent audio is cached by
 text, provider/model, voice, speed, precision, and device. Set
 `allowModelDownload: false` to require an already populated offline cache.
 Every tokenizer and ONNX asset is validated against its pinned size and

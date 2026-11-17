@@ -5,11 +5,13 @@ description: Demo Video Builder creates, rehearses, records, finishes, and valid
 
 # Demo Video Builder
 
-Build real browser recordings from a Markdown narrative. New demos default to
-local Kokoro ONNX narration, while existing `macos-say`, `clips`, `reference`,
-and `silent` manifests remain supported. Keep reusable orchestration in this
-skill and application knowledge in a per-demo `demo.yaml`, normalized
-`scene-plan.json`, and `driver.mjs`.
+Build real browser recordings from a Markdown narrative on macOS and Windows.
+New demos default to local Kokoro ONNX narration, while existing `macos-say`,
+`clips`, `reference`, and `silent` manifests remain supported. On Windows,
+install with `scripts/install.ps1` and keep narration on Kokoro; `macos-say`
+is macOS-only, and the voiceover studio opens in the default browser. Keep
+reusable orchestration in this skill and application knowledge in a per-demo
+`demo.yaml`, normalized `scene-plan.json`, and `driver.mjs`.
 
 The user normally edits only the Markdown script and, optionally, supplies
 voice clips. The agent owns generated configuration and browser choreography:
@@ -63,7 +65,8 @@ Playwright preparation/recording contexts. Never set
 
 ## Initialize once
 
-Run from the installed skill directory after `scripts/install.sh`:
+Run from the installed skill directory after `scripts/install.sh` on macOS
+or `scripts/install.ps1` on Windows:
 
 ```bash
 node scripts/demo.mjs init \
@@ -461,4 +464,4 @@ recorded audio.
 The public source repository is
 `https://github.com/ebarron/EdsDemoVideoBuilder`. Read
 [references/sharing.md](references/sharing.md) for the supported macOS
-user-level installation and update commands.
+and Windows user-level installation and update commands.

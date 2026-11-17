@@ -17,7 +17,9 @@ function writeExecutable(file, source) {
 
 test('installer is executable, idempotent, and verifies required tooling', () => {
   const script = fs.readFileSync(INSTALL, 'utf8');
-  assert.notEqual(fs.statSync(INSTALL).mode & 0o111, 0);
+  if (process.platform !== 'win32') {
+    assert.notEqual(fs.statSync(INSTALL).mode & 0o111, 0);
+  }
   for (const pattern of [
     /uname -s/,
     /command -v gh/,
@@ -37,7 +39,9 @@ test('installer is executable, idempotent, and verifies required tooling', () =>
   assert.doesNotMatch(script, /\.cursor\/skills\//);
 });
 
-test('fresh-clone layout installs twice from an arbitrary directory', () => {
+test('fresh-clone layout installs twice from an arbitrary directory', {
+  skip: process.platform === 'win32' ? 'install.sh requires a POSIX shell' : false,
+}, () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'demo-video-builder-install-'));
   try {
     const checkout = path.join(sandbox, 'arbitrary-install-directory');
@@ -117,6 +121,25 @@ fi
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
+});
+
+test('Windows installer prepares the same runtime as install.sh', () => {
+  const script = fs.readFileSync(path.join(ROOT, 'scripts', 'install.ps1'), 'utf8');
+  for (const pattern of [
+    /Windows_NT/,
+    /Node\.js 20/,
+    /curl\.exe/,
+    /npm ci --no-audit --no-fund/,
+    /playwright\.cmd" install chromium|playwright\.cmd' install chromium|install chromium/,
+    /node scripts\/demo\.mjs kokoro-setup/,
+    /npm run smoke/,
+    /npm test/,
+    /node scripts\/demo\.mjs help/,
+  ]) {
+    assert.match(script, pattern);
+  }
+  assert.doesNotMatch(script, /token=|password=|credential=/i);
+  assert.doesNotMatch(script, /\.cursor\/skills\//);
 });
 
 test('default Chromium launch uses the browser installed by Playwright', () => {
